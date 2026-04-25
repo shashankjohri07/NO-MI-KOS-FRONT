@@ -102,6 +102,11 @@ export default function ErrorReport() {
   const [processingStep, setProcessingStep] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
+  // User-supplied PDF page range for the index/contents section. Pagination
+  // (Rule 3) starts on the page right AFTER `indexEnd`. Empty = auto-detect.
+  const [indexStart, setIndexStart] = useState<string>('');
+  const [indexEnd, setIndexEnd] = useState<string>('');
+
   const PROCESSING_STEPS = [
     'Uploading document...',
     'Extracting text (Tesseract OCR for scanned pages)...',
@@ -173,7 +178,16 @@ export default function ErrorReport() {
 
     try {
       setStatus('processing');
-      const result = await documentApi.detectErrors(files, (pct) => setProgress(pct));
+      const parsedStart = indexStart.trim() ? Number(indexStart) : null;
+      const parsedEnd = indexEnd.trim() ? Number(indexEnd) : null;
+      const result = await documentApi.detectErrors(
+        files,
+        (pct) => setProgress(pct),
+        {
+          indexStart: Number.isInteger(parsedStart) && (parsedStart as number) >= 1 ? parsedStart : null,
+          indexEnd: Number.isInteger(parsedEnd) && (parsedEnd as number) >= 1 ? parsedEnd : null,
+        }
+      );
 
       if (result.ok) {
         setReport(result);
@@ -247,6 +261,8 @@ export default function ErrorReport() {
     setStatus('idle');
     setProgress(0);
     setErrorMsg('');
+    setIndexStart('');
+    setIndexEnd('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -366,6 +382,44 @@ export default function ErrorReport() {
                   </li>
                 ))}
               </ol>
+            )}
+
+            {files.length > 0 && status !== 'processing' && (
+              <div className="er__index-range">
+                <h3 className="er__index-range-title">Index page range (optional)</h3>
+                <p className="er__index-range-hint">
+                  Tell us which PDF pages contain the index/table of contents. Pagination check
+                  starts on the page right after the index ends. Leave blank to auto-detect.
+                </p>
+                <div className="er__index-range-inputs">
+                  <label className="er__index-range-field">
+                    <span className="er__index-range-label">Index starts at PDF page</span>
+                    <input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      placeholder="e.g. 3"
+                      value={indexStart}
+                      onChange={(e) => setIndexStart(e.target.value)}
+                      className="er__index-range-input"
+                      aria-label="Index start PDF page number"
+                    />
+                  </label>
+                  <label className="er__index-range-field">
+                    <span className="er__index-range-label">Index ends at PDF page</span>
+                    <input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      placeholder="e.g. 5"
+                      value={indexEnd}
+                      onChange={(e) => setIndexEnd(e.target.value)}
+                      className="er__index-range-input"
+                      aria-label="Index end PDF page number"
+                    />
+                  </label>
+                </div>
+              </div>
             )}
 
             {files.length > 0 && status !== 'processing' && (

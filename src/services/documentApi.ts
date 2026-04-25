@@ -84,12 +84,19 @@ export const documentApi = {
 
   async detectErrors(
     files: File | File[],
-    onProgress?: (percent: number) => void
+    onProgress?: (percent: number) => void,
+    options?: { indexStart?: number | null; indexEnd?: number | null }
   ): Promise<ErrorReport> {
     const formData = new FormData();
     const fileList = Array.isArray(files) ? files : [files];
     for (const f of fileList) {
       formData.append('document', f);
+    }
+    if (options?.indexStart && options.indexStart >= 1) {
+      formData.append('index_start', String(options.indexStart));
+    }
+    if (options?.indexEnd && options.indexEnd >= 1) {
+      formData.append('index_end', String(options.indexEnd));
     }
 
     const response = await apiClient.post<ErrorReport>('/detect-errors', formData, {

@@ -785,3 +785,60 @@
   background: rgba(200, 0, 0, 0.12);
   border-color: rgba(200, 0, 0, 0.35);
 }
+
+.er__index-range {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.er__index-range-title {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.er__index-range-hint {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.82rem;
+  color: rgba(0, 0, 0, 0.6);
+  line-height: 1.4;
+}
+
+.er__index-range-inputs {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.er__index-range-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1 1 180px;
+  min-width: 180px;
+}
+
+.er__index-range-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.er__index-range-input {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.er__index-range-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
