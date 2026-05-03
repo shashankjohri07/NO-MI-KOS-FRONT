@@ -3,6 +3,13 @@ import axios from 'axios';
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'https://no-mi-kos-back.onrender.com/api/';
 
+// Tolerates VITE_API_BASE_URL with or without a trailing slash. Vite's local
+// proxy convention is '/api' (no slash); Render production URL is '/api/'.
+const apiUrl = (path: string): string => {
+  const base = API_BASE_URL.replace(/\/+$/, '');
+  return `${base}/${path.replace(/^\/+/, '')}`;
+};
+
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 600000, // 10 min for large PDFs with OCR
@@ -114,6 +121,59 @@ export const documentApi = {
     });
 
     return response.data;
+  },
+
+  // Streaming write — backend pipes the numbered PDF directly into the
+  // response, no JSON, no base64 inflation. Returns the Blob plus a
+  // server-suggested filename.
+  //
+  // `annexures` are optional. When supplied, each annexure file becomes one
+  // annexure: file 1 gets "Annexure A-1" stamped on its first page,
+  // file 2 gets "Annexure A-2", and so on. They are appended after the
+  // merged main PDF and pagination continues across them.
+  async writePagination(
+    files: File | File[],
+    indexEndPage: number,
+    annexures: File[] = []
+  ): Promise<{ blob: Blob; filename: string }> {
+    const formData = new FormData();
+    const fileList = Array.isArray(files) ? files : [files];
+    for (const f of fileList) formData.append('document', f);
+    for (const f of annexures) formData.append('annex', f);
+    formData.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
+
+    const resp = await fetch(apiUrl('write-pagination'), {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      try {
+        const j = JSON.parse(text);
+        throw new Error(j.error || `HTTP ${resp.status}`);
+      } catch {
+        throw new Error(text || `HTTP ${resp.status}`);
+      }
+    }
+
+    const blob = await resp.blob();
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="([^"]+)"/);
+    const filename = m
+      ? m[1]
+      : `${annexures.length ? 'NUMBERED_WITH_ANNEXURES_' : 'NUMBERED_'}${(fileList[0]?.name || 'document').replace(/\.pdf$/i, '')}.pdf`;
+    return { blob, filename };
+  },
+
+  // Lightweight ping. Use it to wake a sleeping Render free-tier dyno
+  // before the user submits.
+  async warmUp(): Promise<void> {
+    try {
+      await fetch(apiUrl('health'), { method: 'GET' });
+    } catch {
+      // Best-effort — failures are silent. The real submit will surface them.
+    }
   },
 };
 

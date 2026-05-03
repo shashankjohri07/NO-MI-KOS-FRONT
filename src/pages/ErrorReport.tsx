@@ -1,282 +1,135 @@
 import { useState, useRef, useEffect } from 'react';
-import { documentApi, ErrorReport as ErrorReportType, ErrorResult } from '../services/documentApi';
+import { documentApi } from '../services/documentApi';
 import '../styles/ErrorReport.css';
 
-function SeverityBadge({ severity }: { severity: string }) {
-  return <span className={`er-badge er-badge--${severity}`}>{severity.toUpperCase()}</span>;
-}
-
-function StatusIcon({ status }: { status: string }) {
-  switch (status) {
-    case 'fail':
-      return <span className="er-status er-status--fail">&#10006;</span>;
-    case 'warning':
-      return <span className="er-status er-status--warning">&#9888;</span>;
-    case 'pass':
-      return <span className="er-status er-status--pass">&#10004;</span>;
-    default:
-      return <span className="er-status er-status--info">&#8505;</span>;
-  }
-}
-
-function PageBadge({ page }: { page: number }) {
-  return <span className="er-page-badge">p.{page}</span>;
-}
-
-function RuleCard({ result }: { result: ErrorResult }) {
-  // Extract page numbers from page_references
-  const pageRefs = result.page_references || [];
-  const pages = pageRefs.map((r) => r.page_num);
-  const expectedPages = result.expected_pages || '';
-
-  return (
-    <div className={`er-card er-card--${result.status}`}>
-      <div className="er-card__header">
-        <StatusIcon status={result.status} />
-        <span className="er-card__id">{result.rule_id}</span>
-        {pages.length > 0 && (
-          <span className="er-card__pages">
-            {pages.slice(0, 5).map((p, i) => (
-              <PageBadge key={i} page={p} />
-            ))}
-            {pages.length > 5 && <span className="er-card__pages-more">+{pages.length - 5}</span>}
-          </span>
-        )}
-        <SeverityBadge severity={result.severity} />
-      </div>
-      <p className="er-card__desc">{result.description}</p>
-      <p className="er-card__detail">{result.detail}</p>
-
-      {result.source && <p className="er-card__source">Source: {result.source}</p>}
-
-      {expectedPages && result.status === 'fail' && (
-        <div className="er-card__expected">
-          <span className="er-card__expected-label">Check page(s):</span>
-          <span className="er-card__expected-value">{expectedPages}</span>
-        </div>
-      )}
-
-      {result.missing && result.missing.length > 0 && (
-        <div className="er-card__missing">
-          <span className="er-card__missing-label">Missing:</span>
-          {result.missing.map((m, i) => (
-            <span key={i} className="er-card__missing-tag">
-              {m}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Show found items with page numbers for passed rules */}
-      {result.status === 'pass' && pageRefs.length > 0 && (
-        <div className="er-card__found-pages">
-          {pageRefs.slice(0, 4).map((ref, i) => (
-            <span key={i} className="er-card__found-item">
-              <PageBadge page={ref.page_num} />
-              {ref.locations && ref.locations.length > 0 && (
-                <span className="er-card__found-text">
-                  &quot;{ref.locations[0].text?.substring(0, 40)}
-                  {(ref.locations[0].text?.length || 0) > 40 ? '...' : ''}&quot;
-                </span>
-              )}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Backend still supports a 'detect'-only mode for CLI/debug usage; the UI
-// only exposes the two write-side operations.
-type Mode = 'write' | 'both';
+// Workflow states. The user paginates main files first; the annexure step is
+// an opt-in second pass that re-runs everything (main + annex) end-to-end.
+//   pick-main   → user selects main volumes, sets index, hits submit
+//   processing  → spinner during a backend call (either pass)
+//   annex-ask   → main PDF downloaded; ask "annexures bhi merge karwane hai?"
+//   pick-annex  → annexure uploader visible
+//   done        → final PDF (with annexures) downloaded; reset prompt
+//   error       → any failure; show retry
+type Step = 'pick-main' | 'processing' | 'annex-ask' | 'pick-annex' | 'done' | 'error';
 
 export default function ErrorReport() {
-  const [files, setFiles] = useState<File[]>([]);
+  const [mainFiles, setMainFiles] = useState<File[]>([]);
+  const [annexFiles, setAnnexFiles] = useState<File[]>([]);
   const [indexEndPage, setIndexEndPage] = useState<string>('');
-  const [mode, setMode] = useState<Mode>('write');
-  const [status, setStatus] = useState<'idle' | 'uploading' | 'processing' | 'done' | 'error'>(
-    'idle'
-  );
-  const [, setProgress] = useState(0);
-  const [report, setReport] = useState<ErrorReportType | null>(null);
+  const [step, setStep] = useState<Step>('pick-main');
   const [errorMsg, setErrorMsg] = useState('');
-  const [activeTab, setActiveTab] = useState<'errors' | 'warnings' | 'passed' | 'info' | 'all'>(
-    'errors'
-  );
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const MAX_FILES = 5;
-
-  const [processingStep, setProcessingStep] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const mainInputRef = useRef<HTMLInputElement>(null);
+  const annexInputRef = useRef<HTMLInputElement>(null);
+  const MAX_FILES = 5;
+  const MAX_ANNEXURES = 20;
 
-  const PROCESSING_STEPS = [
-    'Uploading document...',
-    'Extracting text (Tesseract OCR for scanned pages)...',
-    'Checking required documents and pagination...',
-    'Generating error-marked PDF...',
-    'Finalizing report...',
-  ];
-
+  // Elapsed-seconds counter while processing.
   useEffect(() => {
-    if (status !== 'processing') {
-      setProcessingStep(0);
+    if (step !== 'processing') {
       setElapsedSeconds(0);
       return;
     }
+    const t = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [step]);
 
-    // Advance steps on a schedule
-    const stepTimers = [0, 3, 10, 30, 60]; // seconds when each step shows
-    const stepInterval = setInterval(() => {
-      setElapsedSeconds((prev) => {
-        const next = prev + 1;
-        const nextStep = stepTimers.findIndex((t) => t > next);
-        setProcessingStep(
-          nextStep === -1 ? PROCESSING_STEPS.length - 1 : Math.max(0, nextStep - 1)
-        );
-        return next;
-      });
-    }, 1000);
+  // Keep-warm: ping backend on mount so the Render free dyno wakes up while
+  // the user is still selecting files.
+  useEffect(() => {
+    documentApi.warmUp();
+  }, []);
 
-    return () => clearInterval(stepInterval);
-  }, [status]);
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-  const addFiles = (incoming: File[]) => {
+  const safeIndexEnd = () => {
+    const n = Number.parseInt(indexEndPage, 10);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  };
+
+  // --- file pickers --------------------------------------------------------
+  const addMainFiles = (incoming: File[]) => {
     const pdfs = incoming.filter((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
     if (pdfs.length === 0) return;
-    setFiles((prev) => [...prev, ...pdfs].slice(0, MAX_FILES));
-    setReport(null);
-    setStatus('idle');
+    setMainFiles((prev) => [...prev, ...pdfs].slice(0, MAX_FILES));
+    setStep('pick-main');
     setErrorMsg('');
   };
-
-  const removeFile = (idx: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const moveFile = (idx: number, dir: -1 | 1) => {
-    setFiles((prev) => {
+  const removeMainFile = (idx: number) =>
+    setMainFiles((prev) => prev.filter((_, i) => i !== idx));
+  const moveMainFile = (idx: number, dir: -1 | 1) =>
+    setMainFiles((prev) => {
       const next = [...prev];
       const target = idx + dir;
       if (target < 0 || target >= next.length) return prev;
       [next[idx], next[target]] = [next[target], next[idx]];
       return next;
     });
+
+  const addAnnexFiles = (incoming: File[]) => {
+    const pdfs = incoming.filter((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+    if (pdfs.length === 0) return;
+    setAnnexFiles((prev) => [...prev, ...pdfs].slice(0, MAX_ANNEXURES));
   };
+  const removeAnnexFile = (idx: number) =>
+    setAnnexFiles((prev) => prev.filter((_, i) => i !== idx));
+  const moveAnnexFile = (idx: number, dir: -1 | 1) =>
+    setAnnexFiles((prev) => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(e.target.files || []);
-    if (selected.length) addFiles(selected);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    addFiles(Array.from(e.dataTransfer.files));
-  };
-
-  const handleSubmit = async () => {
-    if (files.length === 0) return;
-
-    setStatus('uploading');
-    setProgress(0);
+  // --- submits -------------------------------------------------------------
+  const submitMainOnly = async () => {
+    if (mainFiles.length === 0) return;
     setErrorMsg('');
-
+    setStep('processing');
     try {
-      setStatus('processing');
-      const parsedIndexEnd = Number.parseInt(indexEndPage, 10);
-      const safeIndexEnd =
-        Number.isFinite(parsedIndexEnd) && parsedIndexEnd >= 0 ? parsedIndexEnd : 0;
-      const result = await documentApi.detectErrors(files, safeIndexEnd, mode, (pct) =>
-        setProgress(pct)
-      );
-
-      if (result.ok) {
-        setReport(result);
-        setStatus('done');
-        setActiveTab(result.summary.errors_count > 0 ? 'errors' : 'passed');
-      } else {
-        setErrorMsg(result.error || 'Unknown error');
-        setStatus('error');
-      }
+      const { blob, filename } = await documentApi.writePagination(mainFiles, safeIndexEnd());
+      triggerDownload(blob, filename);
+      setStep('annex-ask');
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
-      setStatus('error');
+      setStep('error');
     }
   };
 
-  const handleDownloadAnnotated = () => {
-    if (!report?.annotated_pdf) return;
-
-    const byteString = atob(report.annotated_pdf);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) {
-      ia[i] = byteString.charCodeAt(i);
+  const submitWithAnnexures = async () => {
+    if (mainFiles.length === 0 || annexFiles.length === 0) return;
+    setErrorMsg('');
+    setStep('processing');
+    try {
+      const { blob, filename } = await documentApi.writePagination(
+        mainFiles,
+        safeIndexEnd(),
+        annexFiles
+      );
+      triggerDownload(blob, filename);
+      setStep('done');
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
+      setStep('error');
     }
-    const blob = new Blob([ab], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ERRORS_MARKED_${report.file}`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleDownloadMerged = () => {
-    if (!report?.merged_pdf) return;
-    const byteString = atob(report.merged_pdf);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-    const blob = new Blob([ab], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'MERGED_appeal.pdf';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleDownloadNumbered = () => {
-    if (!report?.paginated_pdf) return;
-    const byteString = atob(report.paginated_pdf);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-    const blob = new Blob([ab], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `NUMBERED_${report.file}`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const handleReset = () => {
-    setFiles([]);
+    setMainFiles([]);
+    setAnnexFiles([]);
     setIndexEndPage('');
-    setMode('write');
-    setReport(null);
-    setStatus('idle');
-    setProgress(0);
+    setStep('pick-main');
     setErrorMsg('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const getTabItems = (): ErrorResult[] => {
-    if (!report) return [];
-    switch (activeTab) {
-      case 'errors':
-        return report.errors;
-      case 'warnings':
-        return report.warnings;
-      case 'passed':
-        return report.passed;
-      case 'info':
-        return report.info || [];
-      case 'all':
-        return report.all_results;
-    }
+    if (mainInputRef.current) mainInputRef.current.value = '';
+    if (annexInputRef.current) annexInputRef.current.value = '';
   };
 
   return (
@@ -287,28 +140,35 @@ export default function ErrorReport() {
           <p className="er__subtitle">
             Upload one or more PDFs in order. Volumes are merged into a single document, any
             existing top-right page numbers are wiped, and fresh sequential numbers are stamped from
-            page (index + 1) onwards — continuous across all volumes.
+            page (index + 1) onwards — continuous across all volumes. Annexures can be merged in a
+            second optional step.
           </p>
         </header>
 
-        {/* Upload */}
-        {!report && (
+        {/* === STEP 1: pick main files ================================= */}
+        {(step === 'pick-main' || step === 'processing') && (
           <section className="er__upload-section">
             <div
-              className={`er__dropzone ${files.length ? 'er__dropzone--has-file' : ''}`}
+              className={`er__dropzone ${mainFiles.length ? 'er__dropzone--has-file' : ''}`}
               onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
+              onDrop={(e) => {
+                e.preventDefault();
+                addMainFiles(Array.from(e.dataTransfer.files));
+              }}
             >
               <input
-                ref={fileInputRef}
+                ref={mainInputRef}
                 type="file"
                 accept=".pdf"
                 multiple
                 className="er__file-input"
-                onChange={handleFileChange}
-                id="error-detect-upload"
+                onChange={(e) => {
+                  const sel = Array.from(e.target.files || []);
+                  if (sel.length) addMainFiles(sel);
+                }}
+                id="er-main-upload"
               />
-              <label htmlFor="error-detect-upload" className="er__dropzone-label">
+              <label htmlFor="er-main-upload" className="er__dropzone-label">
                 <svg
                   width="40"
                   height="40"
@@ -324,12 +184,12 @@ export default function ErrorReport() {
                 </svg>
                 <div className="er__dropzone-text">
                   <span className="er__dropzone-main">
-                    {files.length
+                    {mainFiles.length
                       ? `Add another volume (max ${MAX_FILES})`
                       : 'Drop your PDFs here or click to browse'}
                   </span>
                   <span className="er__dropzone-hint">
-                    {files.length
+                    {mainFiles.length
                       ? 'Files are merged in the order listed below'
                       : 'Upload one or multiple PDFs — up to 100MB each'}
                   </span>
@@ -337,9 +197,9 @@ export default function ErrorReport() {
               </label>
             </div>
 
-            {files.length > 0 && (
+            {mainFiles.length > 0 && (
               <ol className="er__file-list">
-                {files.map((f, i) => (
+                {mainFiles.map((f, i) => (
                   <li key={`${f.name}-${i}`} className="er__file-list-item">
                     <span className="er__file-list-idx">Vol {i + 1}</span>
                     <span className="er__file-list-name">{f.name}</span>
@@ -350,29 +210,24 @@ export default function ErrorReport() {
                       <button
                         type="button"
                         className="er__file-list-btn"
-                        onClick={() => moveFile(i, -1)}
-                        disabled={i === 0}
-                        aria-label="Move up"
-                        title="Move up"
+                        onClick={() => moveMainFile(i, -1)}
+                        disabled={i === 0 || step === 'processing'}
                       >
                         ↑
                       </button>
                       <button
                         type="button"
                         className="er__file-list-btn"
-                        onClick={() => moveFile(i, 1)}
-                        disabled={i === files.length - 1}
-                        aria-label="Move down"
-                        title="Move down"
+                        onClick={() => moveMainFile(i, 1)}
+                        disabled={i === mainFiles.length - 1 || step === 'processing'}
                       >
                         ↓
                       </button>
                       <button
                         type="button"
                         className="er__file-list-btn er__file-list-btn--remove"
-                        onClick={() => removeFile(i)}
-                        aria-label="Remove"
-                        title="Remove"
+                        onClick={() => removeMainFile(i)}
+                        disabled={step === 'processing'}
                       >
                         ×
                       </button>
@@ -382,13 +237,13 @@ export default function ErrorReport() {
               </ol>
             )}
 
-            {files.length > 0 && status !== 'processing' && (
+            {mainFiles.length > 0 && step === 'pick-main' && (
               <div className="er__index-input">
                 <label htmlFor="er-index-end" className="er__index-input-label">
                   Index ends at page
                   <span className="er__index-input-hint">
                     {' '}
-                    — pagination check begins on the next page (use 0 if there is no index)
+                    — numbering begins on the next page (use 0 if there is no index)
                   </span>
                 </label>
                 <input
@@ -402,266 +257,198 @@ export default function ErrorReport() {
                   value={indexEndPage}
                   onChange={(e) => setIndexEndPage(e.target.value)}
                 />
-
-                <div className="er__mode-select" role="radiogroup" aria-label="Operation mode">
-                  {(
-                    [
-                      {
-                        value: 'write',
-                        label: 'Write Page Numbers',
-                        hint: 'Wipes any existing top-right numbers and stamps 1, 2, 3 …',
-                      },
-                      {
-                        value: 'both',
-                        label: 'Detect + Write Page Numbers',
-                        hint: 'Same as above, plus runs document checks and gives a report',
-                      },
-                    ] as Array<{ value: Mode; label: string; hint: string }>
-                  ).map((opt) => (
-                    <label
-                      key={opt.value}
-                      className={`er__mode-option ${mode === opt.value ? 'er__mode-option--active' : ''}`}
-                      htmlFor={`er-mode-${opt.value}`}
-                    >
-                      <input
-                        id={`er-mode-${opt.value}`}
-                        type="radio"
-                        name="er-mode"
-                        value={opt.value}
-                        checked={mode === opt.value}
-                        onChange={() => setMode(opt.value)}
-                        className="er__mode-option-input"
-                      />
-                      <div className="er__mode-option-text">
-                        <span className="er__mode-option-label">{opt.label}</span>
-                        <span className="er__mode-option-hint">{opt.hint}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
               </div>
             )}
 
-            {files.length > 0 && status !== 'processing' && (
+            {mainFiles.length > 0 && step === 'pick-main' && (
               <button
                 type="button"
                 className="er__btn er__btn--primary"
-                onClick={handleSubmit}
-                disabled={status === 'uploading'}
+                onClick={submitMainOnly}
               >
-                {status === 'uploading'
-                  ? 'Uploading...'
-                  : mode === 'write'
-                    ? 'Write Page Numbers'
-                    : 'Detect & Number Pages'}
+                Write Page Numbers
               </button>
             )}
 
-            {status === 'processing' && (
+            {step === 'processing' && (
               <div className="er__processing">
                 <div className="er__spinner" />
-                <p className="er__processing-text">{PROCESSING_STEPS[processingStep]}</p>
-                <div className="er__processing-steps">
-                  {PROCESSING_STEPS.map((step, i) => (
-                    <div
-                      key={i}
-                      className={`er__step ${i < processingStep ? 'er__step--done' : ''} ${i === processingStep ? 'er__step--active' : ''} ${i > processingStep ? 'er__step--pending' : ''}`}
-                    >
-                      <span className="er__step-icon">
-                        {i < processingStep ? '\u2713' : i === processingStep ? '\u25CB' : '\u00B7'}
-                      </span>
-                      <span className="er__step-label">{step}</span>
-                    </div>
-                  ))}
-                </div>
+                <p className="er__processing-text">Processing…</p>
                 <p className="er__processing-hint">
                   {elapsedSeconds < 60
                     ? `${elapsedSeconds}s elapsed`
                     : `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s elapsed`}
-                  {' \u2014 '}
-                  {elapsedSeconds < 30
-                    ? 'this typically takes 2-3 minutes'
-                    : elapsedSeconds < 90
-                      ? 'vision checks in progress, analyzing each page...'
-                      : 'almost done, generating report...'}
+                  {elapsedSeconds > 30 && ' — backend may be waking up, hang tight'}
                 </p>
-                <div className="er__progress">
-                  <div
-                    className="er__progress-bar"
-                    style={{
-                      width: `${Math.min(95, (processingStep / PROCESSING_STEPS.length) * 100 + 5)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {status === 'error' && (
-              <div className="er__error-msg">
-                <p>{errorMsg}</p>
-                <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
-                  Try Again
-                </button>
               </div>
             )}
           </section>
         )}
 
-        {/* Report */}
-        {report && (
-          <section className="er__report">
-            {/* Summary */}
-            <div className="er__summary">
-              <div className="er__summary-header">
-                <h2 className="er__summary-title">Analysis Report: {report.file}</h2>
-                <div className="er__summary-actions">
-                  {report.merged_pdf && (
-                    <button
-                      type="button"
-                      className="er__btn er__btn--primary er__btn--sm"
-                      onClick={handleDownloadMerged}
-                    >
-                      Download Merged PDF
-                    </button>
-                  )}
-                  {report.annotated_pdf && report.mode !== 'write' && (
-                    <button
-                      type="button"
-                      className="er__btn er__btn--outline er__btn--sm"
-                      onClick={handleDownloadAnnotated}
-                    >
-                      Download Errors-Marked PDF
-                    </button>
-                  )}
-                  {report.paginated_pdf && (
-                    <button
-                      type="button"
-                      className="er__btn er__btn--primary er__btn--sm"
-                      onClick={handleDownloadNumbered}
-                    >
-                      Download Numbered PDF
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="er__btn er__btn--outline er__btn--sm"
-                    onClick={handleReset}
-                  >
-                    New Analysis
-                  </button>
-                </div>
+        {/* === STEP 2: ask about annexures ============================= */}
+        {step === 'annex-ask' && (
+          <section className="er__upload-section">
+            <div className="er__annex-prompt">
+              <p className="er__annex-prompt-title">
+                ✓ Numbered PDF downloaded. Annexures bhi merge karwane hai?
+              </p>
+              <p className="er__annex-prompt-hint">
+                Each annexure file you upload becomes one annexure: <em>Annexure A-1</em>,{' '}
+                <em>Annexure A-2</em>, etc., stamped on its first page. They will be appended to
+                the current document and pagination continues across them.
+              </p>
+              <div className="er__annex-prompt-actions">
+                <button
+                  type="button"
+                  className="er__btn er__btn--primary"
+                  onClick={() => setStep('pick-annex')}
+                >
+                  Haan, annexures upload karu
+                </button>
+                <button
+                  type="button"
+                  className="er__btn er__btn--outline"
+                  onClick={handleReset}
+                >
+                  Nahi, done
+                </button>
               </div>
+            </div>
+          </section>
+        )}
 
-              {report.mode === 'write' ? (
-                <div className="er__write-confirm">
-                  <p className="er__write-confirm-text">
-                    Page numbers stamped on{' '}
-                    <strong>
-                      {Math.max(
-                        0,
-                        report.summary.total_pages - (report.summary.index_end_page ?? 0)
-                      )}
-                    </strong>{' '}
-                    pages (skipped first {report.summary.index_end_page ?? 0} index page
-                    {(report.summary.index_end_page ?? 0) === 1 ? '' : 's'}). Click{' '}
-                    <strong>Download Numbered PDF</strong> above.
-                  </p>
+        {/* === STEP 3: pick annexures ================================== */}
+        {step === 'pick-annex' && (
+          <section className="er__upload-section">
+            <div
+              className={`er__dropzone ${annexFiles.length ? 'er__dropzone--has-file' : ''}`}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                addAnnexFiles(Array.from(e.dataTransfer.files));
+              }}
+            >
+              <input
+                ref={annexInputRef}
+                type="file"
+                accept=".pdf"
+                multiple
+                className="er__file-input"
+                onChange={(e) => {
+                  const sel = Array.from(e.target.files || []);
+                  if (sel.length) addAnnexFiles(sel);
+                }}
+                id="er-annex-upload"
+              />
+              <label htmlFor="er-annex-upload" className="er__dropzone-label">
+                <svg
+                  width="40"
+                  height="40"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  className="er__upload-icon"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <div className="er__dropzone-text">
+                  <span className="er__dropzone-main">
+                    {annexFiles.length
+                      ? `Add another annexure (max ${MAX_ANNEXURES})`
+                      : 'Drop annexure PDFs here'}
+                  </span>
+                  <span className="er__dropzone-hint">
+                    File 1 → Annexure A-1, File 2 → Annexure A-2, … (in upload order)
+                  </span>
                 </div>
-              ) : (
-                <>
-                  <div className="er__stats">
-                    <div className="er__stat">
-                      <span className="er__stat-value er__stat-value--score">
-                        {report.summary.compliance_score}%
-                      </span>
-                      <span className="er__stat-label">Compliance</span>
-                    </div>
-                    <div className="er__stat">
-                      <span className="er__stat-value er__stat-value--errors">
-                        {report.summary.errors_count}
-                      </span>
-                      <span className="er__stat-label">Errors</span>
-                    </div>
-                    <div className="er__stat">
-                      <span className="er__stat-value er__stat-value--warnings">
-                        {report.summary.warnings_count}
-                      </span>
-                      <span className="er__stat-label">Warnings</span>
-                    </div>
-                    <div className="er__stat">
-                      <span className="er__stat-value er__stat-value--passed">
-                        {report.summary.passed_count}
-                      </span>
-                      <span className="er__stat-label">Passed</span>
-                    </div>
-                  </div>
-
-                  <div className="er__meta">
-                    <span>
-                      Document Type: <strong>{report.summary.document_type}</strong>
-                    </span>
-                    <span>
-                      Pages: <strong>{report.summary.total_pages}</strong>
-                    </span>
-                    <span>
-                      OCR: <strong>{report.ocr_method}</strong>
-                    </span>
-                    <span>
-                      Rules Checked: <strong>{report.summary.total_rules_checked}</strong>
-                    </span>
-                  </div>
-                </>
-              )}
+              </label>
             </div>
 
-            {report.mode !== 'write' && (
-              <>
-                {/* Tabs */}
-                <div className="er__tabs">
-                  <button
-                    className={`er__tab ${activeTab === 'errors' ? 'er__tab--active er__tab--errors' : ''}`}
-                    onClick={() => setActiveTab('errors')}
-                  >
-                    Errors ({report.summary.errors_count})
-                  </button>
-                  <button
-                    className={`er__tab ${activeTab === 'warnings' ? 'er__tab--active er__tab--warnings' : ''}`}
-                    onClick={() => setActiveTab('warnings')}
-                  >
-                    Warnings ({report.summary.warnings_count})
-                  </button>
-                  <button
-                    className={`er__tab ${activeTab === 'passed' ? 'er__tab--active er__tab--passed' : ''}`}
-                    onClick={() => setActiveTab('passed')}
-                  >
-                    Passed ({report.summary.passed_count})
-                  </button>
-                  {report.summary.info_count > 0 && (
-                    <button
-                      className={`er__tab ${activeTab === 'info' ? 'er__tab--active er__tab--info' : ''}`}
-                      onClick={() => setActiveTab('info')}
-                    >
-                      Manual ({report.summary.info_count})
-                    </button>
-                  )}
-                  <button
-                    className={`er__tab ${activeTab === 'all' ? 'er__tab--active' : ''}`}
-                    onClick={() => setActiveTab('all')}
-                  >
-                    All ({report.summary.total_rules_checked})
-                  </button>
-                </div>
-
-                {/* Results */}
-                <div className="er__results">
-                  {getTabItems().length === 0 ? (
-                    <p className="er__empty">No items in this category</p>
-                  ) : (
-                    getTabItems().map((result, idx) => <RuleCard key={idx} result={result} />)
-                  )}
-                </div>
-              </>
+            {annexFiles.length > 0 && (
+              <ol className="er__file-list">
+                {annexFiles.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="er__file-list-item">
+                    <span className="er__file-list-idx">A-{i + 1}</span>
+                    <span className="er__file-list-name">{f.name}</span>
+                    <span className="er__file-list-size">
+                      {(f.size / 1024 / 1024).toFixed(2)} MB
+                    </span>
+                    <span className="er__file-list-actions">
+                      <button
+                        type="button"
+                        className="er__file-list-btn"
+                        onClick={() => moveAnnexFile(i, -1)}
+                        disabled={i === 0}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="er__file-list-btn"
+                        onClick={() => moveAnnexFile(i, 1)}
+                        disabled={i === annexFiles.length - 1}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        className="er__file-list-btn er__file-list-btn--remove"
+                        onClick={() => removeAnnexFile(i)}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ol>
             )}
+
+            {annexFiles.length > 0 && (
+              <button
+                type="button"
+                className="er__btn er__btn--primary"
+                onClick={submitWithAnnexures}
+              >
+                Merge Annexures & Re-Number
+              </button>
+            )}
+            <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
+              Cancel
+            </button>
+          </section>
+        )}
+
+        {/* === STEP 4: done ============================================ */}
+        {step === 'done' && (
+          <section className="er__upload-section">
+            <div className="er__annex-prompt">
+              <p className="er__annex-prompt-title">
+                ✓ Final PDF downloaded with {annexFiles.length} annexure
+                {annexFiles.length === 1 ? '' : 's'}.
+              </p>
+              <button
+                type="button"
+                className="er__btn er__btn--primary"
+                onClick={handleReset}
+              >
+                Start Over
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* === ERROR =================================================== */}
+        {step === 'error' && (
+          <section className="er__upload-section">
+            <div className="er__error-msg">
+              <p>{errorMsg}</p>
+              <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
+                Try Again
+              </button>
+            </div>
           </section>
         )}
       </div>
