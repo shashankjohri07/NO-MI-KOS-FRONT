@@ -2,25 +2,45 @@ import { useState, useRef, useEffect } from 'react';
 import { documentApi } from '../services/documentApi';
 import '../styles/ErrorReport.css';
 
-// Workflow states. The user paginates main files first; the annexure step is
-// an opt-in second pass that re-runs everything (main + annex) end-to-end.
+// Workflow states. Three optional passes — main only, +annexures, +signatures.
 //   pick-main   → user selects main volumes, sets index, hits submit
-//   processing  → spinner during a backend call (either pass)
-//   annex-ask   → main PDF downloaded; ask "annexures bhi merge karwane hai?"
+//   processing  → spinner during any backend call
+//   annex-ask   → main PDF downloaded; ask about annexures
 //   pick-annex  → annexure uploader visible
-//   done        → final PDF (with annexures) downloaded; reset prompt
+//   sig-ask     → annexure PDF downloaded; ask about signatures
+//   pick-sig    → two file pickers (client + advocate sig)
+//   done        → final PDF downloaded; reset prompt
 //   error       → any failure; show retry
-type Step = 'pick-main' | 'processing' | 'annex-ask' | 'pick-annex' | 'done' | 'error';
+type Step =
+  | 'pick-main'
+  | 'processing'
+  | 'annex-ask'
+  | 'pick-annex'
+  | 'sig-ask'
+  | 'pick-sig'
+  | 'done'
+  | 'error';
 
 export default function ErrorReport() {
   const [mainFiles, setMainFiles] = useState<File[]>([]);
   const [annexFiles, setAnnexFiles] = useState<File[]>([]);
+  const [clientSig, setClientSig] = useState<File | null>(null);
+  const [advocateSig, setAdvocateSig] = useState<File | null>(null);
   const [indexEndPage, setIndexEndPage] = useState<string>('');
   const [step, setStep] = useState<Step>('pick-main');
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // Latest processed PDF held in memory until the user decides to download.
+  // Lets the user keep going through optional steps (annex → sig) without
+  // a fresh download triggering on each pass; download fires only when
+  // they explicitly opt out, hit the manual Download button, or finish
+  // the last step.
+  const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
+  const [pendingFilename, setPendingFilename] = useState<string>('');
   const mainInputRef = useRef<HTMLInputElement>(null);
   const annexInputRef = useRef<HTMLInputElement>(null);
+  const clientSigInputRef = useRef<HTMLInputElement>(null);
+  const advocateSigInputRef = useRef<HTMLInputElement>(null);
   const MAX_FILES = 5;
   const MAX_ANNEXURES = 20;
 
@@ -90,13 +110,19 @@ export default function ErrorReport() {
     });
 
   // --- submits -------------------------------------------------------------
+  // None of these trigger a download. They stash the resulting Blob in
+  // pendingBlob and advance to the next "ask" step. The user gets the
+  // file when they hit the manual Download button or opt out of the
+  // remaining steps. Last step (signatures) auto-triggers because there
+  // is nothing left to ask after it.
   const submitMainOnly = async () => {
     if (mainFiles.length === 0) return;
     setErrorMsg('');
     setStep('processing');
     try {
       const { blob, filename } = await documentApi.writePagination(mainFiles, safeIndexEnd());
-      triggerDownload(blob, filename);
+      setPendingBlob(blob);
+      setPendingFilename(filename);
       setStep('annex-ask');
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
@@ -114,7 +140,32 @@ export default function ErrorReport() {
         safeIndexEnd(),
         annexFiles
       );
+      setPendingBlob(blob);
+      setPendingFilename(filename);
+      setStep('sig-ask');
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
+      setStep('error');
+    }
+  };
+
+  const submitWithSignatures = async () => {
+    if (mainFiles.length === 0 || annexFiles.length === 0) return;
+    if (!clientSig && !advocateSig) return;
+    setErrorMsg('');
+    setStep('processing');
+    try {
+      const { blob, filename } = await documentApi.writePagination(
+        mainFiles,
+        safeIndexEnd(),
+        annexFiles,
+        { client: clientSig, advocate: advocateSig }
+      );
+      // Final step — trigger download right away since there are no more
+      // optional steps to ask about.
       triggerDownload(blob, filename);
+      setPendingBlob(null);
+      setPendingFilename('');
       setStep('done');
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
@@ -125,11 +176,24 @@ export default function ErrorReport() {
   const handleReset = () => {
     setMainFiles([]);
     setAnnexFiles([]);
+    setClientSig(null);
+    setAdvocateSig(null);
     setIndexEndPage('');
     setStep('pick-main');
     setErrorMsg('');
+    setPendingBlob(null);
+    setPendingFilename('');
     if (mainInputRef.current) mainInputRef.current.value = '';
     if (annexInputRef.current) annexInputRef.current.value = '';
+    if (clientSigInputRef.current) clientSigInputRef.current.value = '';
+    if (advocateSigInputRef.current) advocateSigInputRef.current.value = '';
+  };
+
+  // "I'm done — give me the file now and reset." Used by the "Nahi"
+  // buttons on the annex/sig prompts and by the manual Download button.
+  const downloadAndFinish = () => {
+    if (pendingBlob) triggerDownload(pendingBlob, pendingFilename);
+    handleReset();
   };
 
   return (
@@ -290,7 +354,7 @@ export default function ErrorReport() {
           <section className="er__upload-section">
             <div className="er__annex-prompt">
               <p className="er__annex-prompt-title">
-                ✓ Numbered PDF downloaded. Annexures bhi merge karwane hai?
+                ✓ Numbered PDF ready. Annexures bhi merge karwane hai?
               </p>
               <p className="er__annex-prompt-hint">
                 Each annexure file you upload becomes one annexure: <em>Annexure A-1</em>,{' '}
@@ -308,9 +372,9 @@ export default function ErrorReport() {
                 <button
                   type="button"
                   className="er__btn er__btn--outline"
-                  onClick={handleReset}
+                  onClick={downloadAndFinish}
                 >
-                  Nahi, done
+                  Nahi — download &amp; done
                 </button>
               </div>
             </div>
@@ -421,13 +485,110 @@ export default function ErrorReport() {
           </section>
         )}
 
-        {/* === STEP 4: done ============================================ */}
+        {/* === STEP 4: ask about signatures ============================ */}
+        {step === 'sig-ask' && (
+          <section className="er__upload-section">
+            <div className="er__annex-prompt">
+              <p className="er__annex-prompt-title">
+                ✓ Annexure-merged PDF ready. Signatures bhi integrate karwane hai?
+              </p>
+              <p className="er__annex-prompt-hint">
+                If yes, upload PNG/JPG files of the client and advocate signatures. They'll be
+                stamped in the footer of every annexure page — client on the left, advocate on
+                the right. Existing text on the page is detected; signatures are nudged up
+                automatically so nothing visible gets covered.
+              </p>
+              <div className="er__annex-prompt-actions">
+                <button
+                  type="button"
+                  className="er__btn er__btn--primary"
+                  onClick={() => setStep('pick-sig')}
+                >
+                  Haan, signatures upload karu
+                </button>
+                <button
+                  type="button"
+                  className="er__btn er__btn--outline"
+                  onClick={downloadAndFinish}
+                >
+                  Nahi — download &amp; done
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* === STEP 5: pick signatures ================================= */}
+        {step === 'pick-sig' && (
+          <section className="er__upload-section">
+            <div className="er__sig-grid">
+              <div className="er__sig-slot">
+                <label className="er__sig-slot-label" htmlFor="er-client-sig">
+                  Client Signature (PNG / JPG)
+                </label>
+                <input
+                  ref={clientSigInputRef}
+                  id="er-client-sig"
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  className="er__sig-slot-input"
+                  onChange={(e) => setClientSig(e.target.files?.[0] ?? null)}
+                />
+                {clientSig && (
+                  <p className="er__sig-slot-name">
+                    ✓ {clientSig.name} ({(clientSig.size / 1024).toFixed(1)} KB)
+                  </p>
+                )}
+              </div>
+
+              <div className="er__sig-slot">
+                <label className="er__sig-slot-label" htmlFor="er-advocate-sig">
+                  Advocate Signature (PNG / JPG)
+                </label>
+                <input
+                  ref={advocateSigInputRef}
+                  id="er-advocate-sig"
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  className="er__sig-slot-input"
+                  onChange={(e) => setAdvocateSig(e.target.files?.[0] ?? null)}
+                />
+                {advocateSig && (
+                  <p className="er__sig-slot-name">
+                    ✓ {advocateSig.name} ({(advocateSig.size / 1024).toFixed(1)} KB)
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <p className="er__sig-hint">
+              Upload at least one signature to continue. Both are recommended for proper
+              annexure attestation.
+            </p>
+
+            {(clientSig || advocateSig) && (
+              <button
+                type="button"
+                className="er__btn er__btn--primary"
+                onClick={submitWithSignatures}
+              >
+                Stamp Signatures & Re-Process
+              </button>
+            )}
+            <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
+              Cancel
+            </button>
+          </section>
+        )}
+
+        {/* === STEP 6: done ============================================ */}
         {step === 'done' && (
           <section className="er__upload-section">
             <div className="er__annex-prompt">
               <p className="er__annex-prompt-title">
                 ✓ Final PDF downloaded with {annexFiles.length} annexure
-                {annexFiles.length === 1 ? '' : 's'}.
+                {annexFiles.length === 1 ? '' : 's'}
+                {clientSig || advocateSig ? ' + signatures' : ''}.
               </p>
               <button
                 type="button"

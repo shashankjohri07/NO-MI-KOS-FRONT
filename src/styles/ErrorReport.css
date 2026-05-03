@@ -286,6 +286,55 @@
   margin-top: 0.5rem;
 }
 
+.er__sig-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  width: 100%;
+  max-width: 560px;
+}
+
+@media (max-width: 600px) {
+  .er__sig-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.er__sig-slot {
+  padding: 1rem;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.er__sig-slot-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.er__sig-slot-input {
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.er__sig-slot-name {
+  font-size: 0.8rem;
+  color: var(--gold, #c19a49);
+  margin: 0;
+  word-break: break-all;
+}
+
+.er__sig-hint {
+  font-size: 0.85rem;
+  color: var(--muted, #6b6b6b);
+  margin: 0;
+  max-width: 560px;
+}
+
 .er__btn--primary:hover:not(:disabled) {
   background: var(--gold);
 }

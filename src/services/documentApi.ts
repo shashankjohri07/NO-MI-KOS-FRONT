@@ -134,12 +134,15 @@ export const documentApi = {
   async writePagination(
     files: File | File[],
     indexEndPage: number,
-    annexures: File[] = []
+    annexures: File[] = [],
+    signatures?: { client?: File | null; advocate?: File | null }
   ): Promise<{ blob: Blob; filename: string }> {
     const formData = new FormData();
     const fileList = Array.isArray(files) ? files : [files];
     for (const f of fileList) formData.append('document', f);
     for (const f of annexures) formData.append('annex', f);
+    if (signatures?.client) formData.append('clientSignature', signatures.client);
+    if (signatures?.advocate) formData.append('advocateSignature', signatures.advocate);
     formData.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
 
     const resp = await fetch(apiUrl('write-pagination'), {
