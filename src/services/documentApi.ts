@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://no-mi-kos-back.onrender.com/api/'
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'https://no-mi-kos-back.onrender.com/api/';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -44,6 +45,7 @@ export interface ErrorResult {
 
 export interface ErrorReport {
   ok: boolean;
+  mode?: 'detect' | 'write' | 'both';
   summary: {
     document_type: string;
     total_pages: number;
@@ -53,6 +55,7 @@ export interface ErrorReport {
     passed_count: number;
     compliance_score: number;
     info_count: number;
+    index_end_page?: number;
   };
   errors: ErrorResult[];
   warnings: ErrorResult[];
@@ -63,8 +66,8 @@ export interface ErrorReport {
   file: string;
   error?: string;
   annotated_pdf?: string;
-  diff_pdf?: string;
   merged_pdf?: string;
+  paginated_pdf?: string;
 }
 
 export const documentApi = {
@@ -84,20 +87,21 @@ export const documentApi = {
 
   async detectErrors(
     files: File | File[],
-    onProgress?: (percent: number) => void,
-    options?: { indexStart?: number | null; indexEnd?: number | null }
+    indexEndPage: number,
+    mode: 'detect' | 'write' | 'both',
+    onProgress?: (percent: number) => void
   ): Promise<ErrorReport> {
     const formData = new FormData();
     const fileList = Array.isArray(files) ? files : [files];
     for (const f of fileList) {
       formData.append('document', f);
     }
-    if (options?.indexStart && options.indexStart >= 1) {
-      formData.append('index_start', String(options.indexStart));
-    }
-    if (options?.indexEnd && options.indexEnd >= 1) {
-      formData.append('index_end', String(options.indexEnd));
-    }
+    // 1-indexed last page of the index; pages 1..N are skipped from the
+    // pagination check. 0 means "no skip".
+    formData.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
+    // detect = rule check only; write = stamp page numbers only (fast path,
+    // skips text extraction + rules); both = do everything.
+    formData.append('mode', mode);
 
     const response = await apiClient.post<ErrorReport>('/detect-errors', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
