@@ -87,12 +87,14 @@ function RuleCard({ result }: { result: ErrorResult }) {
   );
 }
 
-type Mode = 'detect' | 'write' | 'both';
+// Backend still supports a 'detect'-only mode for CLI/debug usage; the UI
+// only exposes the two write-side operations.
+type Mode = 'write' | 'both';
 
 export default function ErrorReport() {
   const [files, setFiles] = useState<File[]>([]);
   const [indexEndPage, setIndexEndPage] = useState<string>('');
-  const [mode, setMode] = useState<Mode>('detect');
+  const [mode, setMode] = useState<Mode>('write');
   const [status, setStatus] = useState<'idle' | 'uploading' | 'processing' | 'done' | 'error'>(
     'idle'
   );
@@ -253,7 +255,7 @@ export default function ErrorReport() {
   const handleReset = () => {
     setFiles([]);
     setIndexEndPage('');
-    setMode('detect');
+    setMode('write');
     setReport(null);
     setStatus('idle');
     setProgress(0);
@@ -281,11 +283,11 @@ export default function ErrorReport() {
     <div className="er">
       <div className="er__container">
         <header className="er__header">
-          <h1 className="er__title">Document Error Detection</h1>
+          <h1 className="er__title">Page Numbering</h1>
           <p className="er__subtitle">
-            Upload one or more appeal PDFs (in order) — volumes are merged and scanned for required
-            documents and sequential top-right pagination. Tell us which page your index ends on,
-            and we'll check that page (index + 1) onwards is numbered 1, 2, 3, …
+            Upload one or more PDFs in order. Volumes are merged into a single document, any
+            existing top-right page numbers are wiped, and fresh sequential numbers are stamped from
+            page (index + 1) onwards — continuous across all volumes.
           </p>
         </header>
 
@@ -405,19 +407,14 @@ export default function ErrorReport() {
                   {(
                     [
                       {
-                        value: 'detect',
-                        label: 'Detect only',
-                        hint: 'Check rules — does not modify the PDF',
-                      },
-                      {
                         value: 'write',
-                        label: 'Write page numbers',
-                        hint: 'Skip detection (faster). Stamps 1, 2, 3 …',
+                        label: 'Write Page Numbers',
+                        hint: 'Wipes any existing top-right numbers and stamps 1, 2, 3 …',
                       },
                       {
                         value: 'both',
-                        label: 'Detect + write',
-                        hint: 'Run rules and stamp numbers in one pass',
+                        label: 'Detect + Write Page Numbers',
+                        hint: 'Same as above, plus runs document checks and gives a report',
                       },
                     ] as Array<{ value: Mode; label: string; hint: string }>
                   ).map((opt) => (
@@ -456,9 +453,7 @@ export default function ErrorReport() {
                   ? 'Uploading...'
                   : mode === 'write'
                     ? 'Write Page Numbers'
-                    : mode === 'both'
-                      ? 'Detect & Number Pages'
-                      : 'Detect Errors'}
+                    : 'Detect & Number Pages'}
               </button>
             )}
 
