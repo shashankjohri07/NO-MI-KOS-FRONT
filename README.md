@@ -1,5 +1,7 @@
 # Nomikos Frontend (`NO-MI-KOS-FRONT`)
 
+> **Live:** https://no-mi-kos-front.onrender.com/detect-errors · *Render free tier: first request after idle takes ~10–20 s.*
+
 React + Vite single-page app that drives the Nomikos PDF toolkit. The UI
 is single-purpose — page numbering with optional annexure and signature
 steps. No PDF logic lives here; everything routes through the backend's
