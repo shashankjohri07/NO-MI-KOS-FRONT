@@ -1,7 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
 import HomePage from '../pages/HomePage.tsx';
 import UserOptions from '../pages/UserOptions.tsx';
-import ErrorReport from '../pages/ErrorReport.tsx';
+import ErrorReport from '../pages/ErrorReport';
 
 const AppRoutes = () => {
   return (
