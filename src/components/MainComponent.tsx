@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import {
   useProblemStats,
   useProducts,
@@ -217,9 +218,9 @@ function Pricing({ pricing }: { pricing: ReturnType<typeof usePricing> }) {
                 <li key={f}>{f}</li>
               ))}
             </ul>
-            <a href="#access" className="pricing-card__btn">
+            <Link to="/login" className="pricing-card__btn">
               {cta}
-            </a>
+            </Link>
           </div>
         ))}
       </div>

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useHeroStats } from '../context/ContentContext';
 import '../styles/Hero.css';
 
@@ -21,9 +22,9 @@ export default function Hero() {
         </p>
 
         <div className="hero__actions">
-          <a href="#access" className="btn btn--primary">
+          <Link to="/login" className="btn btn--primary">
             Login/Signup →
-          </a>
+          </Link>
           <a href="#suite" className="btn btn--ghost">
             Explore Products
           </a>
