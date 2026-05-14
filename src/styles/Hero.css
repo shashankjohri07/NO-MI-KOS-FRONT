@@ -5,6 +5,11 @@
   padding-top: 80px; /* navbar height */
 }
 
+/* Single-column layout when the dark stats panel is hidden. */
+.hero.hero--solo {
+  grid-template-columns: 1fr;
+}
+
 /* ── Left ── */
 .hero__left {
   display: flex;
