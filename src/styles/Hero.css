@@ -5,6 +5,51 @@
   padding-top: 80px; /* navbar height */
 }
 
+/* ── Right-panel pitch (single-stat editorial layout) ── */
+.hero__pitch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.hero__pitch-num {
+  font-family: var(--serif);
+  font-size: clamp(5rem, 11vw, 9rem);
+  font-weight: 700;
+  color: var(--paper);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+.hero__pitch-num span {
+  color: var(--gold);
+  margin: 0 0.05em;
+}
+
+.hero__pitch-unit {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 0.5rem 0 1.75rem;
+}
+
+.hero__pitch-body {
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  font-style: normal;
+  font-weight: 400;
+  color: rgba(245, 240, 232, 0.78);
+  line-height: 1.5;
+  max-width: 32ch;
+  margin: 0;
+}
+.hero__pitch-body em {
+  color: var(--paper);
+  font-style: italic;
+}
+
 /* ── Left ── */
 .hero__left {
   display: flex;
@@ -98,7 +143,18 @@
 
 /* ── Right ── */
 .hero__right {
-  background: var(--ink);
+  /* Layered: dark gradient on top (left-heavy for text legibility) → SC photo
+   * → fallback solid ink underneath in case the image fails to load. */
+  background:
+    linear-gradient(
+      to right,
+      rgba(14, 13, 11, 0.92) 0%,
+      rgba(14, 13, 11, 0.78) 38%,
+      rgba(14, 13, 11, 0.4) 78%,
+      rgba(14, 13, 11, 0.25) 100%
+    ),
+    url('/supreme-court.jpg') center/cover no-repeat,
+    var(--ink);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -113,7 +169,7 @@
   right: -20%;
   width: 500px;
   height: 500px;
-  background: radial-gradient(circle, rgba(184, 150, 46, 0.15) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(184, 150, 46, 0.18) 0%, transparent 70%);
   pointer-events: none;
 }
 

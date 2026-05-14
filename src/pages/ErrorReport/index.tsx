@@ -244,7 +244,7 @@ export default function ErrorReport() {
           <section className="er__upload-section">
             <div className="er__annex-prompt">
               <p className="er__annex-prompt-title">
-                ✓ Numbered PDF ready. Annexures bhi merge karwane hai?
+                ✓ Numbered PDF is ready. Would you like to merge annexures as well?
               </p>
               <p className="er__annex-prompt-hint">
                 Each annexure file you upload becomes one annexure: <em>Annexure A-1</em>,{' '}
@@ -257,14 +257,14 @@ export default function ErrorReport() {
                   className="er__btn er__btn--primary"
                   onClick={() => setStep('pick-annex')}
                 >
-                  Haan, annexures upload karu
+                  Yes, upload annexures
                 </button>
                 <button
                   type="button"
                   className="er__btn er__btn--outline"
                   onClick={downloadAndFinish}
                 >
-                  Nahi — download &amp; done
+                  No — download &amp; done
                 </button>
               </div>
             </div>
@@ -290,7 +290,7 @@ export default function ErrorReport() {
           <section className="er__upload-section">
             <div className="er__annex-prompt">
               <p className="er__annex-prompt-title">
-                ✓ Annexure-merged PDF ready. Signatures bhi integrate karwane hai?
+                ✓ Annexure-merged PDF is ready. Would you like to integrate signatures as well?
               </p>
               <p className="er__annex-prompt-hint">
                 If yes, upload PNG/JPG files of the client and advocate signatures. They&apos;ll
@@ -304,14 +304,14 @@ export default function ErrorReport() {
                   className="er__btn er__btn--primary"
                   onClick={() => setStep('pick-sig')}
                 >
-                  Haan, signatures upload karu
+                  Yes, upload signatures
                 </button>
                 <button
                   type="button"
                   className="er__btn er__btn--outline"
                   onClick={downloadAndFinish}
                 >
-                  Nahi — download &amp; done
+                  No — download &amp; done
                 </button>
               </div>
             </div>
