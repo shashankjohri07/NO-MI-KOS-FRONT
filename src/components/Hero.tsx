@@ -27,7 +27,7 @@ export default function Hero() {
 
         <div className="hero__pitch">
           <p className="hero__pitch-num">
-            12<span>–</span>15
+            6<span>–</span>9
           </p>
           <p className="hero__pitch-unit">hours</p>
           <p className="hero__pitch-body">
@@ -39,9 +39,6 @@ export default function Hero() {
           </p>
         </div>
 
-        <span className="hero__deco" aria-hidden="true">
-          §
-        </span>
       </div>
     </section>
   );
