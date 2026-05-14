@@ -23,11 +23,9 @@ export default function Hero() {
       </div>
 
       <div className="hero__right">
-        <p className="hero__right-label">The stakes</p>
-
         <div className="hero__pitch">
           <p className="hero__pitch-num">
-            6<span>–</span>9
+            7<span>–</span>8
           </p>
           <p className="hero__pitch-unit">hours</p>
           <p className="hero__pitch-body">
