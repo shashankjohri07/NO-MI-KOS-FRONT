@@ -1,5 +1,9 @@
 {
   "rewrites": [
+    {
+      "source": "/auth-api/:path*",
+      "destination": "https://nomikos-auth-service.onrender.com/:path*"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

@@ -11,6 +11,8 @@ interface Props {
   onSubmit: () => void;
   onCancel: () => void;
   maxAnnexures: number;
+  hideSubmit?: boolean;
+  hideCancel?: boolean;
 }
 
 /**
@@ -28,6 +30,8 @@ export default function AnnexPickStep({
   onSubmit,
   onCancel,
   maxAnnexures,
+  hideSubmit = false,
+  hideCancel = false,
 }: Props) {
   return (
     <>
@@ -53,14 +57,16 @@ export default function AnnexPickStep({
         />
       )}
 
-      {files.length > 0 && (
+      {files.length > 0 && !hideSubmit && (
         <button type="button" className="er__btn er__btn--primary" onClick={onSubmit}>
           Merge Annexures &amp; Re-Number
         </button>
       )}
-      <button type="button" className="er__btn er__btn--outline" onClick={onCancel}>
-        Cancel
-      </button>
+      {!hideCancel && (
+        <button type="button" className="er__btn er__btn--outline" onClick={onCancel}>
+          Cancel
+        </button>
+      )}
     </>
   );
 }

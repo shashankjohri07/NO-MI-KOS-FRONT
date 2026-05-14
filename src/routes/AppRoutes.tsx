@@ -6,6 +6,10 @@ import Login from '../pages/Login.tsx';
 import Signup from '../pages/Signup.tsx';
 import AuthCallback from '../pages/AuthCallback.tsx';
 import AuthConfirm from '../pages/AuthConfirm.tsx';
+import PageNumberingTool from '../pages/Tools/PageNumbering';
+import AnnexuresTool from '../pages/Tools/Annexures';
+import SignaturesTool from '../pages/Tools/Signatures';
+import RequireAuth from '../components/RequireAuth';
 
 const AppRoutes = () => {
   return (
@@ -15,8 +19,55 @@ const AppRoutes = () => {
       <Route path="/signup" element={<Signup />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/auth/confirm" element={<AuthConfirm />} />
-      <Route path="/options" element={<UserOptions />} />
-      <Route path="/detect-errors" element={<ErrorReport />} />
+
+      <Route
+        path="/options"
+        element={
+          <RequireAuth>
+            <UserOptions />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/prep"
+        element={
+          <RequireAuth>
+            <ErrorReport />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/detect-errors"
+        element={
+          <RequireAuth>
+            <ErrorReport />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/tools/page-numbering"
+        element={
+          <RequireAuth>
+            <PageNumberingTool />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/tools/annexures"
+        element={
+          <RequireAuth>
+            <AnnexuresTool />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/tools/signatures"
+        element={
+          <RequireAuth>
+            <SignaturesTool />
+          </RequireAuth>
+        }
+      />
     </Routes>
   );
 };

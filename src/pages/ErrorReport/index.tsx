@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { documentApi } from '../../services/documentApi';
+import Breadcrumb, { type BreadcrumbStep } from '../../components/Breadcrumb';
 import '../../styles/ErrorReport.css';
 import MainFileStep from './MainFileStep';
 import AnnexPickStep from './AnnexPickStep';
@@ -7,14 +8,6 @@ import SigPickStep from './SigPickStep';
 import { useFileList } from './useFileList';
 
 // Workflow states. Three optional passes — main only, +annexures, +signatures.
-//   pick-main   → user selects main volumes, sets index, hits submit
-//   processing  → spinner during any backend call
-//   annex-ask   → main PDF ready; ask about annexures
-//   pick-annex  → annexure uploader visible
-//   sig-ask     → annexure PDF ready; ask about signatures
-//   pick-sig    → two file pickers (client + advocate sig)
-//   done        → final PDF downloaded; reset prompt
-//   error       → any failure; show retry
 type Step =
   | 'pick-main'
   | 'processing'
@@ -28,8 +21,25 @@ type Step =
 const MAX_FILES = 5;
 const MAX_ANNEXURES = 20;
 
+// Which logical step (1/2/3) each internal state belongs to.
+function stepIndex(s: Step): 1 | 2 | 3 | 4 {
+  switch (s) {
+    case 'pick-main':
+    case 'processing':
+    case 'error':
+      return 1;
+    case 'annex-ask':
+    case 'pick-annex':
+      return 2;
+    case 'sig-ask':
+    case 'pick-sig':
+      return 3;
+    case 'done':
+      return 4;
+  }
+}
+
 export default function ErrorReport() {
-  // Two file lists driven by the shared hook.
   const main = useFileList(MAX_FILES);
   const annex = useFileList(MAX_ANNEXURES);
 
@@ -39,19 +49,16 @@ export default function ErrorReport() {
   const [step, setStep] = useState<Step>('pick-main');
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // Highest step the user has progressed past. Used by the breadcrumb to mark
+  // earlier nodes as "done" even after the user navigates back via the crumb.
+  const [furthestStep, setFurthestStep] = useState<1 | 2 | 3 | 4>(1);
 
-  // Latest processed PDF held in memory until the user decides to download.
-  // Lets the user keep going through optional steps (annex → sig) without
-  // a fresh download triggering on each pass; download fires only when
-  // they explicitly opt out, hit the manual Download button, or finish
-  // the last step.
   const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const [pendingFilename, setPendingFilename] = useState<string>('');
 
   const clientSigInputRef = useRef<HTMLInputElement>(null);
   const advocateSigInputRef = useRef<HTMLInputElement>(null);
 
-  // Elapsed-seconds counter while processing.
   useEffect(() => {
     if (step !== 'processing') {
       setElapsedSeconds(0);
@@ -61,14 +68,10 @@ export default function ErrorReport() {
     return () => clearInterval(t);
   }, [step]);
 
-  // Keep-warm: ping backend on mount so the Render free dyno wakes up
-  // while the user is still selecting files. Trims ~30s off the first
-  // real submit when the dyno was sleeping.
   useEffect(() => {
     documentApi.warmUp();
   }, []);
 
-  // --- helpers ----------------------------------------------------------
   const triggerDownload = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -83,6 +86,10 @@ export default function ErrorReport() {
     return Number.isFinite(n) && n >= 0 ? n : 0;
   };
 
+  const bumpFurthest = (to: 2 | 3 | 4) => {
+    setFurthestStep((curr) => (to > curr ? to : curr));
+  };
+
   const handleReset = () => {
     main.reset();
     annex.reset();
@@ -93,22 +100,22 @@ export default function ErrorReport() {
     setErrorMsg('');
     setPendingBlob(null);
     setPendingFilename('');
+    setFurthestStep(1);
     if (clientSigInputRef.current) clientSigInputRef.current.value = '';
     if (advocateSigInputRef.current) advocateSigInputRef.current.value = '';
   };
 
-  // "I'm done — give me the file now and reset." Used by the "Nahi"
-  // buttons on the annex/sig prompts.
   const downloadAndFinish = () => {
     if (pendingBlob) triggerDownload(pendingBlob, pendingFilename);
     handleReset();
   };
 
-  // --- submits ----------------------------------------------------------
-  // None of these trigger a download. They stash the resulting Blob in
-  // pendingBlob and advance to the next "ask" step. The user gets the
-  // file when they opt out of the remaining steps. Last step (signatures)
-  // auto-triggers because there is nothing left to ask after it.
+  const jumpToStep = (i: number) => {
+    if (i === 0) setStep('pick-main');
+    else if (i === 1) setStep('pick-annex');
+    else if (i === 2) setStep('pick-sig');
+  };
+
   const submitMainOnly = async () => {
     if (main.files.length === 0) return;
     setErrorMsg('');
@@ -117,6 +124,7 @@ export default function ErrorReport() {
       const { blob, filename } = await documentApi.writePagination(main.files, safeIndexEnd());
       setPendingBlob(blob);
       setPendingFilename(filename);
+      bumpFurthest(2);
       setStep('annex-ask');
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
@@ -136,6 +144,7 @@ export default function ErrorReport() {
       );
       setPendingBlob(blob);
       setPendingFilename(filename);
+      bumpFurthest(3);
       setStep('sig-ask');
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
@@ -155,11 +164,10 @@ export default function ErrorReport() {
         annex.files,
         { client: clientSig, advocate: advocateSig }
       );
-      // Last step — fire the download right away since there's nothing
-      // left to ask about.
       triggerDownload(blob, filename);
       setPendingBlob(null);
       setPendingFilename('');
+      bumpFurthest(4);
       setStep('done');
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
@@ -167,20 +175,41 @@ export default function ErrorReport() {
     }
   };
 
+  const current = stepIndex(step);
+  const crumbs: BreadcrumbStep[] = [
+    {
+      label: 'Page Numbering',
+      active: current === 1,
+      done: furthestStep > 1 && current !== 1,
+      reachable: true,
+    },
+    {
+      label: 'Annexures',
+      active: current === 2,
+      done: furthestStep > 2 && current !== 2,
+      reachable: main.files.length > 0,
+    },
+    {
+      label: 'Signatures',
+      active: current === 3,
+      done: furthestStep > 3 && current !== 3,
+      reachable: main.files.length > 0 && annex.files.length > 0,
+    },
+  ];
+
   return (
     <div className="er">
       <div className="er__container">
         <header className="er__header">
-          <h1 className="er__title">Page Numbering</h1>
+          <h1 className="er__title">Document Prep</h1>
           <p className="er__subtitle">
-            Upload one or more PDFs in order. Volumes are merged into a single document, any
-            existing top-right page numbers are wiped, and fresh sequential numbers are stamped from
-            page (index + 1) onwards — continuous across all volumes. Annexures and signatures can
-            be merged in optional second and third steps.
+            Three-stage filing prep: number pages, merge annexures, stamp signatures. Skip what you
+            don&apos;t need — the breadcrumb above lets you jump between stages.
           </p>
         </header>
 
-        {/* === STEP 1: pick main files (also covers the processing spinner state) */}
+        <Breadcrumb steps={crumbs} onJump={jumpToStep} />
+
         {(step === 'pick-main' || step === 'processing') && (
           <section className="er__upload-section">
             <MainFileStep
@@ -211,7 +240,6 @@ export default function ErrorReport() {
           </section>
         )}
 
-        {/* === STEP 2: ask about annexures */}
         {step === 'annex-ask' && (
           <section className="er__upload-section">
             <div className="er__annex-prompt">
@@ -243,7 +271,6 @@ export default function ErrorReport() {
           </section>
         )}
 
-        {/* === STEP 3: pick annexures */}
         {step === 'pick-annex' && (
           <section className="er__upload-section">
             <AnnexPickStep
@@ -259,7 +286,6 @@ export default function ErrorReport() {
           </section>
         )}
 
-        {/* === STEP 4: ask about signatures */}
         {step === 'sig-ask' && (
           <section className="er__upload-section">
             <div className="er__annex-prompt">
@@ -292,7 +318,6 @@ export default function ErrorReport() {
           </section>
         )}
 
-        {/* === STEP 5: pick signatures */}
         {step === 'pick-sig' && (
           <section className="er__upload-section">
             <SigPickStep
@@ -308,7 +333,6 @@ export default function ErrorReport() {
           </section>
         )}
 
-        {/* === STEP 6: done */}
         {step === 'done' && (
           <section className="er__upload-section">
             <div className="er__annex-prompt">
@@ -324,7 +348,6 @@ export default function ErrorReport() {
           </section>
         )}
 
-        {/* === ERROR */}
         {step === 'error' && (
           <section className="er__upload-section">
             <div className="er__error-msg">

@@ -21,6 +21,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Pure state — RequireAuth handles route gating/redirects. Keeping
+  // navigation out of here avoids races between this on-mount check and
+  // the route-level guard.
   const checkAuth = async () => {
     try {
       const response: AuthResponse = await authApi.getMe();
@@ -28,25 +31,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(response.data.user);
       } else {
         setUser(null);
-        if (
-          window.location.pathname !== '/' &&
-          !window.location.pathname.startsWith('/auth/') &&
-          window.location.pathname !== '/login' &&
-          window.location.pathname !== '/signup'
-        ) {
-          navigate('/', { replace: true });
-        }
       }
     } catch {
       setUser(null);
-      if (
-        window.location.pathname !== '/' &&
-        !window.location.pathname.startsWith('/auth/') &&
-        window.location.pathname !== '/login' &&
-        window.location.pathname !== '/signup'
-      ) {
-        navigate('/', { replace: true });
-      }
     } finally {
       setLoading(false);
     }

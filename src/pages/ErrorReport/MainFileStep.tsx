@@ -13,6 +13,9 @@ interface Props {
   onSubmit: () => void;
   isProcessing: boolean;
   maxFiles: number;
+  /** When true, hides the inline submit button — used when composing this
+   * step into a larger form that submits everything at once. */
+  hideSubmit?: boolean;
 }
 
 /**
@@ -32,6 +35,7 @@ export default function MainFileStep({
   onSubmit,
   isProcessing,
   maxFiles,
+  hideSubmit = false,
 }: Props) {
   return (
     <>
@@ -85,7 +89,7 @@ export default function MainFileStep({
         </div>
       )}
 
-      {files.length > 0 && !isProcessing && (
+      {files.length > 0 && !isProcessing && !hideSubmit && (
         <button type="button" className="er__btn er__btn--primary" onClick={onSubmit}>
           Write Page Numbers
         </button>

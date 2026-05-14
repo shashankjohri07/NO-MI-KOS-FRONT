@@ -1,6 +1,14 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_AUTH_SERVICE_URL || 'https://nomikos-auth-service.onrender.com';
+// Default to same-origin proxy ('/auth-api') so auth cookies stick across
+// browsers (Safari ITP, Chrome incognito, etc.). The reverse proxy is
+// configured in vercel.json + nginx.conf and rewrites /auth-api/* to the
+// real auth service.
+//
+// Rollback: set VITE_AUTH_SERVICE_URL=https://nomikos-auth-service.onrender.com
+// in the deploy environment (Vercel project settings / Render env) to bypass
+// the proxy and hit the auth service directly. No code change needed.
+const API_BASE_URL = import.meta.env.VITE_AUTH_SERVICE_URL || '/auth-api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

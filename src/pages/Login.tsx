@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authApi } from '../services/authApi';
 import '../styles/Login.css';
 
 export default function Login() {
   const { checkAuth } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  // RequireAuth stashes the intended destination here when it bounces
+  // an unauthenticated user; fall back to the wizard if no destination.
+  const redirectTo = (location.state as { from?: string } | null)?.from ?? '/prep';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,7 +24,7 @@ export default function Login() {
     const response = await authApi.login({ email, password });
     if (response.success) {
       await checkAuth();
-      navigate('/detect-errors');
+      navigate(redirectTo, { replace: true });
     } else {
       setError(response.error || 'Login failed. Please try again.');
     }
