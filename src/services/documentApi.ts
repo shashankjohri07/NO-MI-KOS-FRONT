@@ -1,7 +1,13 @@
 import axios from 'axios';
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'https://no-mi-kos-back.onrender.com/api/';
+// Default to the same-origin '/api' proxy (configured in nginx.conf +
+// vite.config.ts). Same-origin means CORS never applies — no preflight, no
+// dependency on the backend's Access-Control-Allow-Origin / FRONTEND_URL.
+//
+// Rollback: set VITE_API_BASE_URL=https://no-mi-kos-back.onrender.com/api/
+// in the deploy environment to bypass the proxy and hit the backend
+// directly. No code change needed.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/';
 
 // Tolerates VITE_API_BASE_URL with or without a trailing slash. Vite's local
 // proxy convention is '/api' (no slash); Render production URL is '/api/'.

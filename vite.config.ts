@@ -5,9 +5,14 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      // Dev-time mirror of the production /api reverse proxy (nginx.conf).
+      // Points at the deployed backend so local dev works same-origin
+      // without needing a local Python backend. Override with a local
+      // target if you run the backend on :3001.
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'https://no-mi-kos-back.onrender.com',
         changeOrigin: true,
+        secure: true,
       },
       // Dev-time mirror of the production reverse proxy defined in
       // vercel.json + nginx.conf. Keeps auth requests same-origin so cookies
