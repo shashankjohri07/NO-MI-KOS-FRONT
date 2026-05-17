@@ -151,13 +151,32 @@ export const documentApi = {
     if (signatures?.advocate) formData.append('advocateSignature', signatures.advocate);
     formData.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
 
-    const resp = await fetch(apiUrl('write-pagination'), {
+    // Render free-tier dynos sleep after ~15 min idle. The first request
+    // after that returns a gateway error (502/503/504) from Render's router
+    // while the dyno cold-starts. Detect that, wait for /health to come
+    // back, then retry the upload once so the user never sees a raw 502.
+    const GATEWAY = new Set([502, 503, 504]);
+
+    let resp = await fetch(apiUrl('write-pagination'), {
       method: 'POST',
       body: formData,
     });
 
+    if (GATEWAY.has(resp.status)) {
+      await waitForBackendAwake();
+      resp = await fetch(apiUrl('write-pagination'), {
+        method: 'POST',
+        body: formData,
+      });
+    }
+
     if (!resp.ok) {
       const text = await resp.text();
+      if (GATEWAY.has(resp.status)) {
+        throw new Error(
+          'The processing server is waking up and did not respond in time. Please hit Try Again in a few seconds.'
+        );
+      }
       try {
         const j = JSON.parse(text);
         throw new Error(j.error || `HTTP ${resp.status}`);
@@ -185,5 +204,20 @@ export const documentApi = {
     }
   },
 };
+
+// Poll /health until the dyno is awake. Render free-tier cold starts take
+// ~30-60s; cap the wait so a genuinely dead backend still surfaces an error.
+async function waitForBackendAwake(maxMs = 90000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    try {
+      const r = await fetch(apiUrl('health'), { method: 'GET' });
+      if (r.ok) return;
+    } catch {
+      // network blip while the dyno spins up — keep polling
+    }
+    await new Promise((res) => setTimeout(res, 3000));
+  }
+}
 
 export default documentApi;
