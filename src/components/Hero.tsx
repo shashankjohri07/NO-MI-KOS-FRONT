@@ -16,9 +16,9 @@ export default function Hero() {
           <Link to="/login" className="btn btn--primary">
             Login/Signup →
           </Link>
-          <a href="#suite" className="btn btn--ghost">
+          <Link to="/products" className="btn btn--ghost">
             Explore Products
-          </a>
+          </Link>
         </div>
       </div>
 

@@ -1,13 +1,5 @@
 import { Link } from 'react-router-dom';
-import '../styles/MainComponent.css';
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="section-label">{children}</p>;
-}
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="section-title">{children}</h2>;
-}
+import '../styles/Products.css';
 
 interface Tool {
   to: string;
@@ -60,43 +52,37 @@ const TOOLS: Tool[] = [
   },
 ];
 
-function Products() {
-  return (
-    <section className="products" id="suite">
-      <header className="products__header">
-        <SectionLabel>Product Suite</SectionLabel>
-        <SectionTitle>
-          Pick a single tool.
-          <br />
-          Or run the full pipeline.
-        </SectionTitle>
-      </header>
-
-      <div className="products__grid">
-        {TOOLS.map((t) => (
-          <Link className="product-card" key={t.title} to={t.to}>
-            <span className={`product-card__tag product-card__tag--${t.tagVariant}`}>{t.tag}</span>
-            <span className="product-card__icon" role="img" aria-hidden="true">
-              {t.icon}
-            </span>
-            <h3 className="product-card__title">{t.title}</h3>
-            <p className="product-card__desc">{t.description}</p>
-            <ul className="product-card__features">
-              {t.features.map((f) => (
-                <li key={f}>{f}</li>
-              ))}
-            </ul>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export default function Main() {
+export default function Products() {
   return (
     <main>
-      <Products />
+      <section className="products" id="suite">
+        <header className="products__header">
+          <p className="section-label">Product Suite</p>
+          <h2 className="section-title">
+            Pick a single tool.
+            <br />
+            Or run the full pipeline.
+          </h2>
+        </header>
+
+        <div className="products__grid">
+          {TOOLS.map((t) => (
+            <Link className="product-card" key={t.title} to={t.to}>
+              <span className={`product-card__tag product-card__tag--${t.tagVariant}`}>{t.tag}</span>
+              <span className="product-card__icon" role="img" aria-hidden="true">
+                {t.icon}
+              </span>
+              <h3 className="product-card__title">{t.title}</h3>
+              <p className="product-card__desc">{t.description}</p>
+              <ul className="product-card__features">
+                {t.features.map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+            </Link>
+          ))}
+        </div>
+      </section>
     </main>
   );
 }

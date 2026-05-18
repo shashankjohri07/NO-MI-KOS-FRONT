@@ -9,8 +9,8 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   // RequireAuth stashes the intended destination here when it bounces
-  // an unauthenticated user; fall back to the wizard if no destination.
-  const redirectTo = (location.state as { from?: string } | null)?.from ?? '/prep';
+  // an unauthenticated user; fall back to the product suite if no destination.
+  const redirectTo = (location.state as { from?: string } | null)?.from ?? '/products';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

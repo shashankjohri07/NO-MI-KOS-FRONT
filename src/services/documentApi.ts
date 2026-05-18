@@ -137,42 +137,126 @@ export const documentApi = {
   // annexure: file 1 gets "Annexure A-1" stamped on its first page,
   // file 2 gets "Annexure A-2", and so on. They are appended after the
   // merged main PDF and pagination continues across them.
+  // Async-first: stage the upload as a background job (POST /api/jobs/...),
+  // poll until the worker finishes, then fetch the result. This decouples
+  // the user's request from the heavy PDF processing — no HTTP timeout / OOM
+  // on big files, survives concurrent load. If the backend has no async
+  // pipeline configured (503) or doesn't know the endpoint (404), it
+  // transparently falls back to the legacy synchronous stream.
+  //
+  // `onProgress` (optional) reports {state, progress} during polling so the
+  // UI can show "Queued / Processing N%". Existing 4-arg callers are
+  // unaffected.
   async writePagination(
     files: File | File[],
     indexEndPage: number,
     annexures: File[] = [],
-    signatures?: { client?: File | null; advocate?: File | null }
+    signatures?: { client?: File | null; advocate?: File | null },
+    onProgress?: (info: { state: string; progress: number }) => void
   ): Promise<{ blob: Blob; filename: string }> {
-    const formData = new FormData();
     const fileList = Array.isArray(files) ? files : [files];
-    for (const f of fileList) formData.append('document', f);
-    for (const f of annexures) formData.append('annex', f);
-    if (signatures?.client) formData.append('clientSignature', signatures.client);
-    if (signatures?.advocate) formData.append('advocateSignature', signatures.advocate);
-    formData.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
+    const buildForm = () => {
+      const fd = new FormData();
+      for (const f of fileList) fd.append('document', f);
+      for (const f of annexures) fd.append('annex', f);
+      if (signatures?.client) fd.append('clientSignature', signatures.client);
+      if (signatures?.advocate) fd.append('advocateSignature', signatures.advocate);
+      fd.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
+      return fd;
+    };
+    const fallbackName = `${annexures.length ? 'NUMBERED_WITH_ANNEXURES_' : 'NUMBERED_'}${(
+      fileList[0]?.name || 'document'
+    ).replace(/\.pdf$/i, '')}.pdf`;
 
-    const resp = await fetch(apiUrl('write-pagination'), {
-      method: 'POST',
-      body: formData,
-    });
+    // Render free-tier dynos sleep after ~15 min idle; the first request
+    // returns a gateway error while the dyno cold-starts. Wake + retry once.
+    const GATEWAY = new Set([502, 503, 504]);
 
-    if (!resp.ok) {
-      const text = await resp.text();
+    // ── 1. Try to enqueue an async job ──
+    // A backend without the async branch deployed has no such route; Express
+    // may reset the connection mid-upload (fetch throws) instead of cleanly
+    // returning 404. Either way → fall back to the legacy sync stream so the
+    // deploy order (frontend-before-backend) can't break uploads.
+    let createResp: Response;
+    try {
+      createResp = await fetch(apiUrl('jobs/write-pagination'), {
+        method: 'POST',
+        body: buildForm(),
+      });
+      if (GATEWAY.has(createResp.status)) {
+        await waitForBackendAwake();
+        createResp = await fetch(apiUrl('jobs/write-pagination'), {
+          method: 'POST',
+          body: buildForm(),
+        });
+      }
+    } catch {
+      return writePaginationSync(buildForm(), fallbackName);
+    }
+
+    // Async path unavailable (old backend / Redis+R2 not provisioned) →
+    // legacy synchronous stream. Behaviour identical to before.
+    if (createResp.status === 404 || createResp.status === 503) {
+      return writePaginationSync(buildForm(), fallbackName);
+    }
+
+    if (!createResp.ok) {
+      const text = await createResp.text();
+      if (GATEWAY.has(createResp.status)) {
+        throw new Error(
+          'The processing server is waking up and did not respond in time. Please hit Try Again in a few seconds.'
+        );
+      }
       try {
-        const j = JSON.parse(text);
-        throw new Error(j.error || `HTTP ${resp.status}`);
+        throw new Error(JSON.parse(text).error || `HTTP ${createResp.status}`);
       } catch {
-        throw new Error(text || `HTTP ${resp.status}`);
+        throw new Error(text || `HTTP ${createResp.status}`);
       }
     }
 
-    const blob = await resp.blob();
-    const cd = resp.headers.get('Content-Disposition') || '';
-    const m = cd.match(/filename="([^"]+)"/);
-    const filename = m
-      ? m[1]
-      : `${annexures.length ? 'NUMBERED_WITH_ANNEXURES_' : 'NUMBERED_'}${(fileList[0]?.name || 'document').replace(/\.pdf$/i, '')}.pdf`;
-    return { blob, filename };
+    const { jobId } = (await createResp.json()) as { jobId: string };
+    onProgress?.({ state: 'queued', progress: 0 });
+
+    // ── 2. Poll until the worker completes ──
+    const POLL_MS = 2500;
+    const MAX_MS = 20 * 60 * 1000; // 20 min ceiling for very large filings
+    const start = Date.now();
+    while (Date.now() - start < MAX_MS) {
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      let statusResp: Response;
+      try {
+        statusResp = await fetch(apiUrl(`jobs/${jobId}`));
+      } catch {
+        continue; // transient network blip — keep polling
+      }
+      if (GATEWAY.has(statusResp.status)) continue;
+      if (!statusResp.ok) {
+        const t = await statusResp.text();
+        try {
+          throw new Error(JSON.parse(t).error || `HTTP ${statusResp.status}`);
+        } catch {
+          throw new Error(t || `HTTP ${statusResp.status}`);
+        }
+      }
+      const data = (await statusResp.json()) as {
+        state: string;
+        progress?: number;
+        resultUrl?: string;
+        downloadName?: string;
+        error?: string;
+      };
+      if (data.state === 'completed' && data.resultUrl) {
+        onProgress?.({ state: 'completed', progress: 100 });
+        const fileResp = await fetch(data.resultUrl);
+        if (!fileResp.ok) throw new Error('Could not download the finished file.');
+        return { blob: await fileResp.blob(), filename: data.downloadName || fallbackName };
+      }
+      if (data.state === 'failed') {
+        throw new Error(data.error || 'Processing failed on the server.');
+      }
+      onProgress?.({ state: data.state, progress: data.progress ?? 0 });
+    }
+    throw new Error('Processing timed out. The file may be too large — please try again.');
   },
 
   // Lightweight ping. Use it to wake a sleeping Render free-tier dyno
@@ -185,5 +269,52 @@ export const documentApi = {
     }
   },
 };
+
+// Legacy synchronous stream — used only when the async job pipeline isn't
+// available on the backend (404/503). Preserves the original behaviour:
+// Python pipes the PDF straight into the HTTP response.
+async function writePaginationSync(
+  formData: FormData,
+  fallbackName: string
+): Promise<{ blob: Blob; filename: string }> {
+  const GATEWAY = new Set([502, 503, 504]);
+  let resp = await fetch(apiUrl('write-pagination'), { method: 'POST', body: formData });
+  if (GATEWAY.has(resp.status)) {
+    await waitForBackendAwake();
+    resp = await fetch(apiUrl('write-pagination'), { method: 'POST', body: formData });
+  }
+  if (!resp.ok) {
+    const text = await resp.text();
+    if (GATEWAY.has(resp.status)) {
+      throw new Error(
+        'The processing server is waking up and did not respond in time. Please hit Try Again in a few seconds.'
+      );
+    }
+    try {
+      throw new Error(JSON.parse(text).error || `HTTP ${resp.status}`);
+    } catch {
+      throw new Error(text || `HTTP ${resp.status}`);
+    }
+  }
+  const blob = await resp.blob();
+  const cd = resp.headers.get('Content-Disposition') || '';
+  const m = cd.match(/filename="([^"]+)"/);
+  return { blob, filename: m ? m[1] : fallbackName };
+}
+
+// Poll /health until the dyno is awake. Render free-tier cold starts take
+// ~30-60s; cap the wait so a genuinely dead backend still surfaces an error.
+async function waitForBackendAwake(maxMs = 90000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    try {
+      const r = await fetch(apiUrl('health'), { method: 'GET' });
+      if (r.ok) return;
+    } catch {
+      // network blip while the dyno spins up — keep polling
+    }
+    await new Promise((res) => setTimeout(res, 3000));
+  }
+}
 
 export default documentApi;
