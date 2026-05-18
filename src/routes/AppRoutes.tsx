@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import HomePage from '../pages/HomePage.tsx';
+import Products from '../pages/Products.tsx';
 import UserOptions from '../pages/UserOptions.tsx';
 import ErrorReport from '../pages/ErrorReport';
 import Login from '../pages/Login.tsx';
@@ -20,6 +21,14 @@ const AppRoutes = () => {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/auth/confirm" element={<AuthConfirm />} />
 
+      <Route
+        path="/products"
+        element={
+          <RequireAuth>
+            <Products />
+          </RequireAuth>
+        }
+      />
       <Route
         path="/options"
         element={
