@@ -152,7 +152,9 @@ export const documentApi = {
     indexEndPage: number,
     annexures: File[] = [],
     signatures?: { client?: File | null; advocate?: File | null },
-    onProgress?: (info: { state: string; progress: number }) => void,
+    /** Kept in the signature for backwards-compat with existing callers
+     * that pass an onProgress (no-op now — the pipeline is synchronous). */
+    _onProgress?: (info: { state: string; progress: number }) => void,
     /**
      * Optional comma+range spec ("1, 3-5, 8") of additional MAIN-document
      * pages — referenced by their stamped page number — that should also
@@ -162,17 +164,16 @@ export const documentApi = {
      */
     signPages?: string
   ): Promise<{ blob: Blob; filename: string }> {
+    void _onProgress;
     const fileList = Array.isArray(files) ? files : [files];
-    const buildForm = () => {
-      const fd = new FormData();
-      for (const f of fileList) fd.append('document', f);
-      for (const f of annexures) fd.append('annex', f);
-      if (signatures?.client) fd.append('clientSignature', signatures.client);
-      if (signatures?.advocate) fd.append('advocateSignature', signatures.advocate);
-      fd.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
-      if (signPages && signPages.trim()) fd.append('signPages', signPages.trim());
-      return fd;
-    };
+    const fd = new FormData();
+    for (const f of fileList) fd.append('document', f);
+    for (const f of annexures) fd.append('annex', f);
+    if (signatures?.client) fd.append('clientSignature', signatures.client);
+    if (signatures?.advocate) fd.append('advocateSignature', signatures.advocate);
+    fd.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
+    if (signPages && signPages.trim()) fd.append('signPages', signPages.trim());
+
     const fallbackName = `${annexures.length ? 'NUMBERED_WITH_ANNEXURES_' : 'NUMBERED_'}${(
       fileList[0]?.name || 'document'
     ).replace(/\.pdf$/i, '')}.pdf`;
@@ -180,92 +181,36 @@ export const documentApi = {
     // Render free-tier dynos sleep after ~15 min idle; the first request
     // returns a gateway error while the dyno cold-starts. Wake + retry once.
     const GATEWAY = new Set([502, 503, 504]);
-
-    // ── 1. Try to enqueue an async job ──
-    // A backend without the async branch deployed has no such route; Express
-    // may reset the connection mid-upload (fetch throws) instead of cleanly
-    // returning 404. Either way → fall back to the legacy sync stream so the
-    // deploy order (frontend-before-backend) can't break uploads.
-    let createResp: Response;
-    try {
-      createResp = await fetch(apiUrl('jobs/write-pagination'), {
-        method: 'POST',
-        body: buildForm(),
-      });
-      if (GATEWAY.has(createResp.status)) {
-        await waitForBackendAwake();
-        createResp = await fetch(apiUrl('jobs/write-pagination'), {
-          method: 'POST',
-          body: buildForm(),
-        });
-      }
-    } catch {
-      return writePaginationSync(buildForm(), fallbackName);
+    let resp = await fetch(apiUrl('write-pagination'), { method: 'POST', body: fd });
+    if (GATEWAY.has(resp.status)) {
+      await waitForBackendAwake();
+      // FormData can't be re-sent on Safari; rebuild defensively.
+      const fdRetry = new FormData();
+      for (const f of fileList) fdRetry.append('document', f);
+      for (const f of annexures) fdRetry.append('annex', f);
+      if (signatures?.client) fdRetry.append('clientSignature', signatures.client);
+      if (signatures?.advocate) fdRetry.append('advocateSignature', signatures.advocate);
+      fdRetry.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
+      if (signPages && signPages.trim()) fdRetry.append('signPages', signPages.trim());
+      resp = await fetch(apiUrl('write-pagination'), { method: 'POST', body: fdRetry });
     }
-
-    // Async path unavailable (old backend / Redis+R2 not provisioned) →
-    // legacy synchronous stream. Behaviour identical to before.
-    if (createResp.status === 404 || createResp.status === 503) {
-      return writePaginationSync(buildForm(), fallbackName);
-    }
-
-    if (!createResp.ok) {
-      const text = await createResp.text();
-      if (GATEWAY.has(createResp.status)) {
+    if (!resp.ok) {
+      const text = await resp.text();
+      if (GATEWAY.has(resp.status)) {
         throw new Error(
           'The processing server is waking up and did not respond in time. Please hit Try Again in a few seconds.'
         );
       }
       try {
-        throw new Error(JSON.parse(text).error || `HTTP ${createResp.status}`);
+        throw new Error(JSON.parse(text).error || `HTTP ${resp.status}`);
       } catch {
-        throw new Error(text || `HTTP ${createResp.status}`);
+        throw new Error(text || `HTTP ${resp.status}`);
       }
     }
-
-    const { jobId } = (await createResp.json()) as { jobId: string };
-    onProgress?.({ state: 'queued', progress: 0 });
-
-    // ── 2. Poll until the worker completes ──
-    const POLL_MS = 2500;
-    const MAX_MS = 20 * 60 * 1000; // 20 min ceiling for very large filings
-    const start = Date.now();
-    while (Date.now() - start < MAX_MS) {
-      await new Promise((r) => setTimeout(r, POLL_MS));
-      let statusResp: Response;
-      try {
-        statusResp = await fetch(apiUrl(`jobs/${jobId}`));
-      } catch {
-        continue; // transient network blip — keep polling
-      }
-      if (GATEWAY.has(statusResp.status)) continue;
-      if (!statusResp.ok) {
-        const t = await statusResp.text();
-        try {
-          throw new Error(JSON.parse(t).error || `HTTP ${statusResp.status}`);
-        } catch {
-          throw new Error(t || `HTTP ${statusResp.status}`);
-        }
-      }
-      const data = (await statusResp.json()) as {
-        state: string;
-        progress?: number;
-        resultUrl?: string;
-        downloadName?: string;
-        error?: string;
-      };
-      if (data.state === 'completed' && data.resultUrl) {
-        onProgress?.({ state: 'completed', progress: 100 });
-        const fileResp = await fetch(data.resultUrl);
-        if (!fileResp.ok) throw new Error('Could not download the finished file.');
-        return { blob: await fileResp.blob(), filename: data.downloadName || fallbackName };
-      }
-      if (data.state === 'failed') {
-        throw new Error(data.error || 'Processing failed on the server.');
-      }
-      onProgress?.({ state: data.state, progress: data.progress ?? 0 });
-    }
-    throw new Error('Processing timed out. The file may be too large — please try again.');
+    const blob = await resp.blob();
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="([^"]+)"/);
+    return { blob, filename: m ? m[1] : fallbackName };
   },
 
   // Lightweight ping. Use it to wake a sleeping Render free-tier dyno
@@ -278,38 +223,6 @@ export const documentApi = {
     }
   },
 };
-
-// Legacy synchronous stream — used only when the async job pipeline isn't
-// available on the backend (404/503). Preserves the original behaviour:
-// Python pipes the PDF straight into the HTTP response.
-async function writePaginationSync(
-  formData: FormData,
-  fallbackName: string
-): Promise<{ blob: Blob; filename: string }> {
-  const GATEWAY = new Set([502, 503, 504]);
-  let resp = await fetch(apiUrl('write-pagination'), { method: 'POST', body: formData });
-  if (GATEWAY.has(resp.status)) {
-    await waitForBackendAwake();
-    resp = await fetch(apiUrl('write-pagination'), { method: 'POST', body: formData });
-  }
-  if (!resp.ok) {
-    const text = await resp.text();
-    if (GATEWAY.has(resp.status)) {
-      throw new Error(
-        'The processing server is waking up and did not respond in time. Please hit Try Again in a few seconds.'
-      );
-    }
-    try {
-      throw new Error(JSON.parse(text).error || `HTTP ${resp.status}`);
-    } catch {
-      throw new Error(text || `HTTP ${resp.status}`);
-    }
-  }
-  const blob = await resp.blob();
-  const cd = resp.headers.get('Content-Disposition') || '';
-  const m = cd.match(/filename="([^"]+)"/);
-  return { blob, filename: m ? m[1] : fallbackName };
-}
 
 // Poll /health until the dyno is awake. Render free-tier cold starts take
 // ~30-60s; cap the wait so a genuinely dead backend still surfaces an error.
