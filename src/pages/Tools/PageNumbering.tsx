@@ -4,10 +4,10 @@ import MainFileStep from '../ErrorReport/MainFileStep';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
 
-const MAX_FILES = 5;
+// No hard cap — transport-layer limits (multer/nginx) still apply.
 
 export default function PageNumberingTool() {
-  const main = useFileList(MAX_FILES);
+  const main = useFileList();
   const [indexEndPage, setIndexEndPage] = useState('');
   const [phase, setPhase] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -88,7 +88,6 @@ export default function PageNumberingTool() {
               setIndexEndPage={setIndexEndPage}
               onSubmit={submit}
               isProcessing={phase === 'processing'}
-              maxFiles={MAX_FILES}
             />
 
             {phase === 'processing' && (

@@ -6,14 +6,14 @@ import SigPickStep from '../ErrorReport/SigPickStep';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
 
-const MAX_FILES = 5;
-const MAX_ANNEXURES = 20;
+// No hard caps — transport-layer limits (multer/nginx) still apply.
 
 export default function SignaturesTool() {
-  const main = useFileList(MAX_FILES);
-  const annex = useFileList(MAX_ANNEXURES);
+  const main = useFileList();
+  const annex = useFileList();
   const [clientSig, setClientSig] = useState<File | null>(null);
   const [advocateSig, setAdvocateSig] = useState<File | null>(null);
+  const [signPages, setSignPages] = useState<string>('');
   const [indexEndPage, setIndexEndPage] = useState('');
   const [phase, setPhase] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -57,6 +57,7 @@ export default function SignaturesTool() {
     annex.reset();
     setClientSig(null);
     setAdvocateSig(null);
+    setSignPages('');
     setIndexEndPage('');
     setPhase('idle');
     setErrorMsg('');
@@ -74,7 +75,9 @@ export default function SignaturesTool() {
         main.files,
         safeIndexEnd(),
         annex.files,
-        { client: clientSig, advocate: advocateSig }
+        { client: clientSig, advocate: advocateSig },
+        undefined,
+        signPages
       );
       triggerDownload(blob, filename);
       setPhase('done');
@@ -110,7 +113,6 @@ export default function SignaturesTool() {
                 setIndexEndPage={setIndexEndPage}
                 onSubmit={submit}
                 isProcessing={phase === 'processing'}
-                maxFiles={MAX_FILES}
                 hideSubmit
               />
             </section>
@@ -126,7 +128,6 @@ export default function SignaturesTool() {
                   onRemove={annex.remove}
                   onSubmit={submit}
                   onCancel={reset}
-                  maxAnnexures={MAX_ANNEXURES}
                   hideSubmit
                   hideCancel
                 />
@@ -143,6 +144,8 @@ export default function SignaturesTool() {
                   advocateInputRef={advocateSigInputRef}
                   onClientChange={setClientSig}
                   onAdvocateChange={setAdvocateSig}
+                  signPages={signPages}
+                  onSignPagesChange={setSignPages}
                   onSubmit={submit}
                   onCancel={reset}
                 />

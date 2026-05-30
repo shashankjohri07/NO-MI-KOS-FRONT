@@ -5,12 +5,11 @@ import AnnexPickStep from '../ErrorReport/AnnexPickStep';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
 
-const MAX_FILES = 5;
-const MAX_ANNEXURES = 20;
+// No hard caps — transport-layer limits (multer/nginx) still apply.
 
 export default function AnnexuresTool() {
-  const main = useFileList(MAX_FILES);
-  const annex = useFileList(MAX_ANNEXURES);
+  const main = useFileList();
+  const annex = useFileList();
   const [indexEndPage, setIndexEndPage] = useState('');
   const [phase, setPhase] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -98,7 +97,6 @@ export default function AnnexuresTool() {
                 setIndexEndPage={setIndexEndPage}
                 onSubmit={submit}
                 isProcessing={phase === 'processing'}
-                maxFiles={MAX_FILES}
                 hideSubmit
               />
             </section>
@@ -114,7 +112,6 @@ export default function AnnexuresTool() {
                   onRemove={annex.remove}
                   onSubmit={submit}
                   onCancel={reset}
-                  maxAnnexures={MAX_ANNEXURES}
                 />
               </section>
             )}

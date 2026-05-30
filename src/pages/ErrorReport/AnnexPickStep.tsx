@@ -10,7 +10,8 @@ interface Props {
   onRemove: (idx: number) => void;
   onSubmit: () => void;
   onCancel: () => void;
-  maxAnnexures: number;
+  /** Optional hard cap on the number of annexures. Omit for unbounded. */
+  maxAnnexures?: number;
   hideSubmit?: boolean;
   hideCancel?: boolean;
 }
@@ -41,7 +42,9 @@ export default function AnnexPickStep({
         hasFiles={files.length > 0}
         mainText={
           files.length
-            ? `Add another annexure (max ${maxAnnexures})`
+            ? typeof maxAnnexures === 'number'
+              ? `Add another annexure (max ${maxAnnexures})`
+              : 'Add another annexure'
             : 'Drop annexure PDFs here'
         }
         hintText="File 1 → Annexure A-1, File 2 → Annexure A-2, … (in upload order)"

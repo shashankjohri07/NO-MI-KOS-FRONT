@@ -152,7 +152,15 @@ export const documentApi = {
     indexEndPage: number,
     annexures: File[] = [],
     signatures?: { client?: File | null; advocate?: File | null },
-    onProgress?: (info: { state: string; progress: number }) => void
+    onProgress?: (info: { state: string; progress: number }) => void,
+    /**
+     * Optional comma+range spec ("1, 3-5, 8") of additional MAIN-document
+     * pages — referenced by their stamped page number — that should also
+     * get client/advocate signatures. Annexure pages already auto-sign on
+     * every page, so out-of-range entries are silently dropped server-side.
+     * Empty / undefined = preserve current behaviour.
+     */
+    signPages?: string
   ): Promise<{ blob: Blob; filename: string }> {
     const fileList = Array.isArray(files) ? files : [files];
     const buildForm = () => {
@@ -162,6 +170,7 @@ export const documentApi = {
       if (signatures?.client) fd.append('clientSignature', signatures.client);
       if (signatures?.advocate) fd.append('advocateSignature', signatures.advocate);
       fd.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
+      if (signPages && signPages.trim()) fd.append('signPages', signPages.trim());
       return fd;
     };
     const fallbackName = `${annexures.length ? 'NUMBERED_WITH_ANNEXURES_' : 'NUMBERED_'}${(

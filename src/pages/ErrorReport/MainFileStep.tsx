@@ -12,7 +12,8 @@ interface Props {
   setIndexEndPage: (v: string) => void;
   onSubmit: () => void;
   isProcessing: boolean;
-  maxFiles: number;
+  /** Optional hard cap on the number of volumes. Omit for unbounded. */
+  maxFiles?: number;
   /** When true, hides the inline submit button — used when composing this
    * step into a larger form that submits everything at once. */
   hideSubmit?: boolean;
@@ -45,7 +46,9 @@ export default function MainFileStep({
         hasFiles={files.length > 0}
         mainText={
           files.length
-            ? `Add another volume (max ${maxFiles})`
+            ? typeof maxFiles === 'number'
+              ? `Add another volume (max ${maxFiles})`
+              : 'Add another volume'
             : 'Drop your PDFs here or click to browse'
         }
         hintText={

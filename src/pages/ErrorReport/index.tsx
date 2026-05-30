@@ -18,8 +18,9 @@ type Step =
   | 'done'
   | 'error';
 
-const MAX_FILES = 5;
-const MAX_ANNEXURES = 20;
+// No hard cap on main volumes or annexures — court filings vary
+// widely in size, and the multer/nginx limits already gate the upload
+// at the transport layer.
 
 // Which logical step (1/2/3) each internal state belongs to.
 function stepIndex(s: Step): 1 | 2 | 3 | 4 {
@@ -40,11 +41,14 @@ function stepIndex(s: Step): 1 | 2 | 3 | 4 {
 }
 
 export default function ErrorReport() {
-  const main = useFileList(MAX_FILES);
-  const annex = useFileList(MAX_ANNEXURES);
+  const main = useFileList();
+  const annex = useFileList();
 
   const [clientSig, setClientSig] = useState<File | null>(null);
   const [advocateSig, setAdvocateSig] = useState<File | null>(null);
+  // Optional comma+range spec ("1, 3-5, 8") of additional MAIN pages to
+  // also sign. Empty string = use the default behaviour (annexures only).
+  const [signPages, setSignPages] = useState<string>('');
   const [indexEndPage, setIndexEndPage] = useState<string>('');
   const [step, setStep] = useState<Step>('pick-main');
   const [errorMsg, setErrorMsg] = useState('');
@@ -95,6 +99,7 @@ export default function ErrorReport() {
     annex.reset();
     setClientSig(null);
     setAdvocateSig(null);
+    setSignPages('');
     setIndexEndPage('');
     setStep('pick-main');
     setErrorMsg('');
@@ -162,7 +167,9 @@ export default function ErrorReport() {
         main.files,
         safeIndexEnd(),
         annex.files,
-        { client: clientSig, advocate: advocateSig }
+        { client: clientSig, advocate: advocateSig },
+        undefined,
+        signPages
       );
       triggerDownload(blob, filename);
       setPendingBlob(null);
@@ -222,7 +229,6 @@ export default function ErrorReport() {
               setIndexEndPage={setIndexEndPage}
               onSubmit={submitMainOnly}
               isProcessing={step === 'processing'}
-              maxFiles={MAX_FILES}
             />
 
             {step === 'processing' && (
@@ -281,7 +287,6 @@ export default function ErrorReport() {
               onRemove={annex.remove}
               onSubmit={submitWithAnnexures}
               onCancel={handleReset}
-              maxAnnexures={MAX_ANNEXURES}
             />
           </section>
         )}
@@ -327,6 +332,8 @@ export default function ErrorReport() {
               advocateInputRef={advocateSigInputRef}
               onClientChange={setClientSig}
               onAdvocateChange={setAdvocateSig}
+              signPages={signPages}
+              onSignPagesChange={setSignPages}
               onSubmit={submitWithSignatures}
               onCancel={handleReset}
             />
