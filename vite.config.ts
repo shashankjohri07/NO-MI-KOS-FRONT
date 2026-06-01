@@ -10,7 +10,7 @@ export default defineConfig({
       // without needing a local Python backend. Override with a local
       // target if you run the backend on :3001.
       '/api': {
-        target: 'https://no-mi-kos-back.onrender.com',
+        target: process.env.VITE_API_PROXY || 'https://no-mi-kos-back.onrender.com',
         changeOrigin: true,
         secure: true,
       },
