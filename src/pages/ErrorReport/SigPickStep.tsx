@@ -8,9 +8,12 @@ interface Props {
   advocateInputRef: Ref<HTMLInputElement>;
   onClientChange: (f: File | null) => void;
   onAdvocateChange: (f: File | null) => void;
-  /** Comma+range spec ("1, 3-5, 8") of extra MAIN pages to also sign. */
-  signPages: string;
-  onSignPagesChange: (v: string) => void;
+  /** Comma+range spec ("1, 3-5, 8") of extra MAIN pages to also sign.
+   * Optional: when `onSignPagesChange` is omitted the "also sign main pages"
+   * block is hidden entirely (the wizard moves it to its own Special Pages
+   * step). The standalone Signatures tool still passes both and shows it. */
+  signPages?: string;
+  onSignPagesChange?: (v: string) => void;
   onSubmit: () => void;
   onCancel: () => void;
 }
@@ -41,8 +44,9 @@ export default function SigPickStep({
   // garbage" / "you'll sign pages 1, 3-5"). The same parser runs again
   // server-side in Python — this is just a UX nicety, not the source
   // of truth.
+  const showExtraPages = typeof onSignPagesChange === 'function';
   const preview = useMemo(() => {
-    const trimmed = signPages.trim();
+    const trimmed = (signPages ?? '').trim();
     if (!trimmed) return { kind: 'empty' as const };
     try {
       const set = parsePageSpec(trimmed);
@@ -98,37 +102,39 @@ export default function SigPickStep({
         </div>
       </div>
 
-      <div className="er__sig-extra">
-        <label className="er__sig-slot-label" htmlFor="er-sign-pages">
-          Also sign these main-document pages (optional)
-        </label>
-        <input
-          id="er-sign-pages"
-          type="text"
-          inputMode="text"
-          autoComplete="off"
-          spellCheck={false}
-          className="er__sig-extra-input"
-          placeholder="e.g. 1, 3-5, 8, 12-15"
-          value={signPages}
-          onChange={(e) => onSignPagesChange(e.target.value)}
-        />
-        <p className="er__sig-extra-hint">
-          Use the <strong>stamped page number</strong> (the digit we put
-          in the top-right corner after numbering) — index pages don&apos;t
-          count. Comma-separated values and ranges both work. Leave blank
-          to skip; annexure pages are signed automatically regardless.
-        </p>
-        {preview.kind === 'ok' && (
-          <p className="er__sig-extra-preview">
-            ✓ Will additionally sign {preview.count}{' '}
-            page{preview.count === 1 ? '' : 's'}: {preview.label}
+      {showExtraPages && (
+        <div className="er__sig-extra">
+          <label className="er__sig-slot-label" htmlFor="er-sign-pages">
+            Also sign these main-document pages (optional)
+          </label>
+          <input
+            id="er-sign-pages"
+            type="text"
+            inputMode="text"
+            autoComplete="off"
+            spellCheck={false}
+            className="er__sig-extra-input"
+            placeholder="e.g. 1, 3-5, 8, 12-15"
+            value={signPages ?? ''}
+            onChange={(e) => onSignPagesChange?.(e.target.value)}
+          />
+          <p className="er__sig-extra-hint">
+            Use the <strong>stamped page number</strong> (the digit we put
+            in the top-right corner after numbering) — index pages don&apos;t
+            count. Comma-separated values and ranges both work. Leave blank
+            to skip; annexure pages are signed automatically regardless.
           </p>
-        )}
-        {preview.kind === 'error' && (
-          <p className="er__sig-extra-error">⚠ {preview.message}</p>
-        )}
-      </div>
+          {preview.kind === 'ok' && (
+            <p className="er__sig-extra-preview">
+              ✓ Will additionally sign {preview.count}{' '}
+              page{preview.count === 1 ? '' : 's'}: {preview.label}
+            </p>
+          )}
+          {preview.kind === 'error' && (
+            <p className="er__sig-extra-error">⚠ {preview.message}</p>
+          )}
+        </div>
+      )}
 
       <p className="er__sig-hint">
         Upload at least one signature to continue. Both are recommended for proper annexure

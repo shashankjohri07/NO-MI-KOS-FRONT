@@ -162,7 +162,14 @@ export const documentApi = {
      * every page, so out-of-range entries are silently dropped server-side.
      * Empty / undefined = preserve current behaviour.
      */
-    signPages?: string
+    signPages?: string,
+    /**
+     * Optional SEPARATE signature images for the special main-document pages
+     * named in `signPages`. Independent of `signatures` (which sign every
+     * annexure page). When omitted, the backend falls back to `signatures`
+     * for the special pages — preserving older callers' behaviour.
+     */
+    specialSignatures?: { client?: File | null; advocate?: File | null }
   ): Promise<{ blob: Blob; filename: string }> {
     void _onProgress;
     const fileList = Array.isArray(files) ? files : [files];
@@ -171,6 +178,9 @@ export const documentApi = {
     for (const f of annexures) fd.append('annex', f);
     if (signatures?.client) fd.append('clientSignature', signatures.client);
     if (signatures?.advocate) fd.append('advocateSignature', signatures.advocate);
+    if (specialSignatures?.client) fd.append('specialSignatureClient', specialSignatures.client);
+    if (specialSignatures?.advocate)
+      fd.append('specialSignatureAdvocate', specialSignatures.advocate);
     fd.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
     if (signPages && signPages.trim()) fd.append('signPages', signPages.trim());
 
@@ -190,6 +200,10 @@ export const documentApi = {
       for (const f of annexures) fdRetry.append('annex', f);
       if (signatures?.client) fdRetry.append('clientSignature', signatures.client);
       if (signatures?.advocate) fdRetry.append('advocateSignature', signatures.advocate);
+      if (specialSignatures?.client)
+        fdRetry.append('specialSignatureClient', specialSignatures.client);
+      if (specialSignatures?.advocate)
+        fdRetry.append('specialSignatureAdvocate', specialSignatures.advocate);
       fdRetry.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
       if (signPages && signPages.trim()) fdRetry.append('signPages', signPages.trim());
       resp = await fetch(apiUrl('write-pagination'), { method: 'POST', body: fdRetry });

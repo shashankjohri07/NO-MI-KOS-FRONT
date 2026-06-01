@@ -5,9 +5,11 @@ import '../../styles/ErrorReport.css';
 import MainFileStep from './MainFileStep';
 import AnnexPickStep from './AnnexPickStep';
 import SigPickStep from './SigPickStep';
+import SpecialPageStep from './SpecialPageStep';
 import { useFileList } from './useFileList';
 
-// Workflow states. Three optional passes — main only, +annexures, +signatures.
+// Workflow states. Four optional passes — main only, +annexures, +signatures,
+// +special-page signatures.
 type Step =
   | 'pick-main'
   | 'processing'
@@ -15,6 +17,8 @@ type Step =
   | 'pick-annex'
   | 'sig-ask'
   | 'pick-sig'
+  | 'special-ask'
+  | 'pick-special'
   | 'done'
   | 'error';
 
@@ -22,8 +26,9 @@ type Step =
 // widely in size, and the multer/nginx limits already gate the upload
 // at the transport layer.
 
-// Which logical step (1/2/3) each internal state belongs to.
-function stepIndex(s: Step): 1 | 2 | 3 | 4 {
+// Which logical step (1/2/3/4) each internal state belongs to. `done` is the
+// terminal node past the last real step.
+function stepIndex(s: Step): 1 | 2 | 3 | 4 | 5 {
   switch (s) {
     case 'pick-main':
     case 'processing':
@@ -35,8 +40,11 @@ function stepIndex(s: Step): 1 | 2 | 3 | 4 {
     case 'sig-ask':
     case 'pick-sig':
       return 3;
-    case 'done':
+    case 'special-ask':
+    case 'pick-special':
       return 4;
+    case 'done':
+      return 5;
   }
 }
 
@@ -46,22 +54,28 @@ export default function ErrorReport() {
 
   const [clientSig, setClientSig] = useState<File | null>(null);
   const [advocateSig, setAdvocateSig] = useState<File | null>(null);
-  // Optional comma+range spec ("1, 3-5, 8") of additional MAIN pages to
-  // also sign. Empty string = use the default behaviour (annexures only).
+  // Optional comma+range spec ("1, 3-5, 8") of MAIN pages to sign in the
+  // Special Pages step. Empty string = no special-page signing.
   const [signPages, setSignPages] = useState<string>('');
+  // Signature images dedicated to the special pages — independent of the
+  // annexure signatures above.
+  const [specialClientSig, setSpecialClientSig] = useState<File | null>(null);
+  const [specialAdvocateSig, setSpecialAdvocateSig] = useState<File | null>(null);
   const [indexEndPage, setIndexEndPage] = useState<string>('');
   const [step, setStep] = useState<Step>('pick-main');
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   // Highest step the user has progressed past. Used by the breadcrumb to mark
   // earlier nodes as "done" even after the user navigates back via the crumb.
-  const [furthestStep, setFurthestStep] = useState<1 | 2 | 3 | 4>(1);
+  const [furthestStep, setFurthestStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const [pendingFilename, setPendingFilename] = useState<string>('');
 
   const clientSigInputRef = useRef<HTMLInputElement>(null);
   const advocateSigInputRef = useRef<HTMLInputElement>(null);
+  const specialClientSigInputRef = useRef<HTMLInputElement>(null);
+  const specialAdvocateSigInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (step !== 'processing') {
@@ -90,7 +104,7 @@ export default function ErrorReport() {
     return Number.isFinite(n) && n >= 0 ? n : 0;
   };
 
-  const bumpFurthest = (to: 2 | 3 | 4) => {
+  const bumpFurthest = (to: 2 | 3 | 4 | 5) => {
     setFurthestStep((curr) => (to > curr ? to : curr));
   };
 
@@ -100,6 +114,8 @@ export default function ErrorReport() {
     setClientSig(null);
     setAdvocateSig(null);
     setSignPages('');
+    setSpecialClientSig(null);
+    setSpecialAdvocateSig(null);
     setIndexEndPage('');
     setStep('pick-main');
     setErrorMsg('');
@@ -108,6 +124,8 @@ export default function ErrorReport() {
     setFurthestStep(1);
     if (clientSigInputRef.current) clientSigInputRef.current.value = '';
     if (advocateSigInputRef.current) advocateSigInputRef.current.value = '';
+    if (specialClientSigInputRef.current) specialClientSigInputRef.current.value = '';
+    if (specialAdvocateSigInputRef.current) specialAdvocateSigInputRef.current.value = '';
   };
 
   const downloadAndFinish = () => {
@@ -119,6 +137,7 @@ export default function ErrorReport() {
     if (i === 0) setStep('pick-main');
     else if (i === 1) setStep('pick-annex');
     else if (i === 2) setStep('pick-sig');
+    else if (i === 3) setStep('special-ask');
   };
 
   const submitMainOnly = async () => {
@@ -167,14 +186,38 @@ export default function ErrorReport() {
         main.files,
         safeIndexEnd(),
         annex.files,
+        { client: clientSig, advocate: advocateSig }
+      );
+      // Hold the annexure-signed PDF; the user may still add special pages.
+      setPendingBlob(blob);
+      setPendingFilename(filename);
+      bumpFurthest(4);
+      setStep('special-ask');
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
+      setStep('error');
+    }
+  };
+
+  const submitWithSpecial = async () => {
+    if (main.files.length === 0 || annex.files.length === 0) return;
+    if (!specialClientSig && !specialAdvocateSig) return;
+    setErrorMsg('');
+    setStep('processing');
+    try {
+      const { blob, filename } = await documentApi.writePagination(
+        main.files,
+        safeIndexEnd(),
+        annex.files,
         { client: clientSig, advocate: advocateSig },
         undefined,
-        signPages
+        signPages,
+        { client: specialClientSig, advocate: specialAdvocateSig }
       );
       triggerDownload(blob, filename);
       setPendingBlob(null);
       setPendingFilename('');
-      bumpFurthest(4);
+      bumpFurthest(5);
       setStep('done');
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
@@ -202,6 +245,14 @@ export default function ErrorReport() {
       done: furthestStep > 3 && current !== 3,
       reachable: main.files.length > 0 && annex.files.length > 0,
     },
+    {
+      label: 'Special Pages',
+      active: current === 4,
+      done: furthestStep > 4 && current !== 4,
+      // Only reachable once the user has passed the Signatures step (there is
+      // a pending PDF to add special-page signatures onto).
+      reachable: furthestStep >= 4,
+    },
   ];
 
   return (
@@ -210,8 +261,9 @@ export default function ErrorReport() {
         <header className="er__header">
           <h1 className="er__title">Document Prep</h1>
           <p className="er__subtitle">
-            Three-stage filing prep: number pages, merge annexures, stamp signatures. Skip what you
-            don&apos;t need — the breadcrumb above lets you jump between stages.
+            Four-stage filing prep: number pages, merge annexures, stamp annexure signatures, then
+            optionally sign specific main pages. Skip what you don&apos;t need — the breadcrumb above
+            lets you jump between stages.
           </p>
         </header>
 
@@ -314,9 +366,12 @@ export default function ErrorReport() {
                 <button
                   type="button"
                   className="er__btn er__btn--outline"
-                  onClick={downloadAndFinish}
+                  onClick={() => {
+                    bumpFurthest(4);
+                    setStep('special-ask');
+                  }}
                 >
-                  No — download &amp; done
+                  No, skip annexure signatures
                 </button>
               </div>
             </div>
@@ -332,9 +387,58 @@ export default function ErrorReport() {
               advocateInputRef={advocateSigInputRef}
               onClientChange={setClientSig}
               onAdvocateChange={setAdvocateSig}
+              onSubmit={submitWithSignatures}
+              onCancel={handleReset}
+            />
+          </section>
+        )}
+
+        {step === 'special-ask' && (
+          <section className="er__upload-section">
+            <div className="er__annex-prompt">
+              <p className="er__annex-prompt-title">
+                {clientSig || advocateSig
+                  ? '✓ Signatures applied to every annexure page. '
+                  : '✓ Annexures merged. '}
+                Do you also want to sign specific main-document pages?
+              </p>
+              <p className="er__annex-prompt-hint">
+                Use this for individual MAIN pages like the vakalatnama, prayer page, or affidavit.
+                You&apos;ll pick the page numbers and upload signature images <em>just for those
+                pages</em> — separate from the annexure signatures.
+              </p>
+              <div className="er__annex-prompt-actions">
+                <button
+                  type="button"
+                  className="er__btn er__btn--primary"
+                  onClick={() => setStep('pick-special')}
+                >
+                  Yes, sign special pages
+                </button>
+                <button
+                  type="button"
+                  className="er__btn er__btn--outline"
+                  onClick={downloadAndFinish}
+                >
+                  No — download &amp; done
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {step === 'pick-special' && (
+          <section className="er__upload-section">
+            <SpecialPageStep
               signPages={signPages}
               onSignPagesChange={setSignPages}
-              onSubmit={submitWithSignatures}
+              clientSig={specialClientSig}
+              advocateSig={specialAdvocateSig}
+              clientInputRef={specialClientSigInputRef}
+              advocateInputRef={specialAdvocateSigInputRef}
+              onClientChange={setSpecialClientSig}
+              onAdvocateChange={setSpecialAdvocateSig}
+              onSubmit={submitWithSpecial}
               onCancel={handleReset}
             />
           </section>
@@ -346,7 +450,8 @@ export default function ErrorReport() {
               <p className="er__annex-prompt-title">
                 ✓ Final PDF downloaded with {annex.files.length} annexure
                 {annex.files.length === 1 ? '' : 's'}
-                {clientSig || advocateSig ? ' + signatures' : ''}.
+                {clientSig || advocateSig ? ' + annexure signatures' : ''}
+                {specialClientSig || specialAdvocateSig ? ' + special-page signatures' : ''}.
               </p>
               <button type="button" className="er__btn er__btn--primary" onClick={handleReset}>
                 Start Over
