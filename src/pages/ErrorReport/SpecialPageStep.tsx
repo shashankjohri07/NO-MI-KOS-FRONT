@@ -1,7 +1,10 @@
-import { useMemo, type Ref } from 'react';
+import { useEffect, useMemo, useState, type Ref } from 'react';
 import { parsePageSpec, formatPageSet } from './pageSpec';
 
 interface Props {
+  /** The current (numbered + annexure-merged) PDF, shown as a live preview so
+   * the user can read the stamped page numbers and decide which to sign. */
+  previewBlob: Blob | null;
   /** Comma+range spec ("1, 3-5, 8") of the MAIN pages to sign. Required here
    * — this whole step exists to collect it plus its own signature images. */
   signPages: string;
@@ -31,6 +34,7 @@ interface Props {
  * least one signature image is chosen.
  */
 export default function SpecialPageStep({
+  previewBlob,
   signPages,
   onSignPagesChange,
   clientSig,
@@ -42,6 +46,19 @@ export default function SpecialPageStep({
   onSubmit,
   onCancel,
 }: Props) {
+  // Object URL for the embedded PDF preview; created from the current blob and
+  // revoked when it changes / the step unmounts to avoid leaking memory.
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+  useEffect(() => {
+    if (!previewBlob) {
+      setPreviewUrl('');
+      return;
+    }
+    const url = URL.createObjectURL(previewBlob);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [previewBlob]);
+
   const preview = useMemo(() => {
     const trimmed = signPages.trim();
     if (!trimmed) return { kind: 'empty' as const };
@@ -62,6 +79,20 @@ export default function SpecialPageStep({
 
   return (
     <>
+      {previewUrl && (
+        <div className="er__preview">
+          <p className="er__preview-label">
+            📄 Document preview — scroll to read the stamped page numbers (top-right of each page),
+            then enter the ones you want to sign below.
+          </p>
+          <iframe
+            src={`${previewUrl}#toolbar=1&navpanes=0`}
+            title="Document preview"
+            className="er__preview-frame"
+          />
+        </div>
+      )}
+
       <div className="er__sig-extra">
         <label className="er__sig-slot-label" htmlFor="er-special-pages">
           Which pages to sign

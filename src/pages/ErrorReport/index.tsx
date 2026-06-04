@@ -430,6 +430,7 @@ export default function ErrorReport() {
         {step === 'pick-special' && (
           <section className="er__upload-section">
             <SpecialPageStep
+              previewBlob={pendingBlob}
               signPages={signPages}
               onSignPagesChange={setSignPages}
               clientSig={specialClientSig}
