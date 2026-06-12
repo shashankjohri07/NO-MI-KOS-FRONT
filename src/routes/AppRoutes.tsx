@@ -10,6 +10,7 @@ import AuthConfirm from '../pages/AuthConfirm.tsx';
 import PageNumberingTool from '../pages/Tools/PageNumbering';
 import AnnexuresTool from '../pages/Tools/Annexures';
 import SignaturesTool from '../pages/Tools/Signatures';
+import Admin from '../pages/Admin';
 import RequireAuth from '../components/RequireAuth';
 
 const AppRoutes = () => {
@@ -74,6 +75,16 @@ const AppRoutes = () => {
         element={
           <RequireAuth>
             <SignaturesTool />
+          </RequireAuth>
+        }
+      />
+      {/* Admin dashboard — RequireAuth ensures a session exists; the page
+          itself asks the backend whoami and bounces non-admins home. */}
+      <Route
+        path="/admin"
+        element={
+          <RequireAuth>
+            <Admin />
           </RequireAuth>
         }
       />

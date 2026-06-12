@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authApi } from '../services/authApi';
+import { subscribeForUpdates } from '../services/adminApi';
 import '../styles/Login.css';
 
 export default function Login() {
@@ -23,6 +24,9 @@ export default function Login() {
 
     const response = await authApi.login({ email, password });
     if (response.success) {
+      // Keep the event-updates subscriber list in sync — fire-and-forget,
+      // never blocks or fails the login flow.
+      subscribeForUpdates(email);
       await checkAuth();
       navigate(redirectTo, { replace: true });
     } else {

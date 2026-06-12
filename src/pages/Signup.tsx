@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authApi } from '../services/authApi';
+import { subscribeForUpdates } from '../services/adminApi';
 import '../styles/Login.css';
 
 export default function Signup() {
@@ -31,6 +32,8 @@ export default function Signup() {
 
     const response = await authApi.signup({ email, password });
     if (response.success) {
+      // New customer -> event-updates list (fire-and-forget; never blocks signup).
+      subscribeForUpdates(email);
       setMessage('Account Created Successfully');
       setTimeout(() => navigate('/login'), 3000);
     } else {

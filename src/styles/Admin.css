@@ -1,0 +1,323 @@
+/* ============================================================================
+   Admin dashboard (events + email blast). Follows the site vocabulary used by
+   ErrorReport.css — BEM-ish class names, CSS variables for ink/paper/serif.
+   ============================================================================ */
+
+.adm {
+  min-height: 100vh;
+  background: var(--paper);
+  padding: 8rem 2rem 4rem;
+}
+
+.adm__container {
+  max-width: 800px;
+  margin: 0 auto;
+  animation: fadeUp 0.5s ease;
+}
+
+.adm__loading {
+  text-align: center;
+  padding-top: 10rem;
+  font-family: var(--sans);
+  color: var(--muted);
+}
+
+.adm__header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.adm__title {
+  font-family: var(--serif);
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-bottom: 0.5rem;
+}
+
+.adm__subtitle {
+  font-family: var(--sans);
+  font-size: 1rem;
+  color: var(--muted);
+  font-weight: 300;
+}
+
+/* --- stat strip ------------------------------------------------------------ */
+.adm__stats {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.adm__stat {
+  background: #fff;
+  border: 1px solid #e8e2d4;
+  border-radius: 12px;
+  padding: 1rem 2rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.adm__stat-num {
+  font-family: var(--serif);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.adm__stat-label {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* --- cards ------------------------------------------------------------------ */
+.adm__card {
+  background: #fff;
+  border: 1px solid #e8e2d4;
+  border-radius: 12px;
+  padding: 1.75rem 2rem;
+  margin-bottom: 2rem;
+}
+
+.adm__card-title {
+  font-family: var(--serif);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 1.25rem;
+}
+
+/* --- form -------------------------------------------------------------------- */
+.adm__label {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 1rem 0 0.35rem;
+}
+
+.adm__input,
+.adm__textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #d6d0c2;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: var(--ink);
+}
+
+.adm__input:focus,
+.adm__textarea:focus {
+  outline: none;
+  border-color: var(--ink);
+}
+
+.adm__textarea {
+  resize: vertical;
+}
+
+.adm__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.adm__img-preview {
+  margin-top: 0.6rem;
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: 8px;
+  border: 1px solid #e8e2d4;
+}
+
+/* --- notices / actions -------------------------------------------------------- */
+.adm__notice {
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  margin-top: 1.2rem;
+}
+
+.adm__notice--ok {
+  background: #eef7ee;
+  color: #1a6b2f;
+  border: 1px solid #bfe3c6;
+}
+
+.adm__notice--err {
+  background: #fdf0ef;
+  color: #a23030;
+  border: 1px solid #efc6c2;
+}
+
+.adm__actions {
+  display: flex;
+  gap: 0.9rem;
+  margin-top: 1.4rem;
+  flex-wrap: wrap;
+}
+
+.adm__btn {
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  padding: 0.7rem 1.4rem;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--ink);
+  transition: opacity 0.15s ease;
+}
+
+.adm__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.adm__btn--primary {
+  background: var(--ink);
+  color: #fff;
+}
+
+.adm__btn--outline {
+  background: transparent;
+  color: var(--ink);
+}
+
+/* --- past events table ----------------------------------------------------------- */
+.adm__empty {
+  font-family: var(--sans);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.adm__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--sans);
+  font-size: 0.88rem;
+}
+
+.adm__table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid #e8e2d4;
+}
+
+.adm__table td {
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid #f1ece0;
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .adm__row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- workspace switcher --------------------------------------------------- */
+.adm__ws {
+  display: flex;
+  gap: 0.5rem;
+  background: #efe9da;
+  border: 1px solid #e2dbc9;
+  border-radius: 12px;
+  padding: 5px;
+  width: fit-content;
+  margin: 0 auto 2rem;
+}
+.adm__ws-tab {
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.5rem 1.1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.adm__ws-tab:hover { color: var(--ink); }
+.adm__ws-tab--active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+/* --- accent stat ----------------------------------------------------------- */
+.adm__stats { flex-wrap: wrap; gap: 0.9rem; }
+.adm__stat { flex-direction: column; align-items: flex-start; gap: 0.15rem; min-width: 120px; }
+.adm__stat--accent { border-color: var(--gold); background: #fffaf0; }
+
+/* --- charts ---------------------------------------------------------------- */
+.adm__charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+.adm__chart-card {
+  background: #fff;
+  border: 1px solid #e8e2d4;
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+}
+.adm__chart-title {
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.adm__svg { width: 100%; height: auto; display: block; }
+
+/* --- manage admins --------------------------------------------------------- */
+.adm__hint {
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}
+.adm__admins { list-style: none; margin: 0 0 1rem; padding: 0; }
+.adm__admin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.2rem;
+  border-bottom: 1px solid #f1ece0;
+  font-family: var(--sans);
+  font-size: 0.9rem;
+}
+.adm__admin-email { color: var(--ink); }
+.adm__admin-tag { font-size: 0.78rem; color: var(--muted); }
+.adm__admin-remove {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  color: #a23030;
+  background: transparent;
+  border: 1px solid #efc6c2;
+  border-radius: 6px;
+  padding: 0.25rem 0.7rem;
+  cursor: pointer;
+}
+.adm__admin-remove:hover:not(:disabled) { background: #fdf0ef; }
+.adm__admin-add { display: flex; gap: 0.6rem; align-items: stretch; }
+.adm__admin-add .adm__input { margin: 0; flex: 1; }
+.adm__admin-add .adm__btn { white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .adm__charts { grid-template-columns: 1fr; }
+}

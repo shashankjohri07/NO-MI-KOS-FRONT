@@ -136,3 +136,15 @@
     transform: translateY(-50%);
   }
 }
+/* Admin-only workspace entry (rendered only when isAdmin). */
+.side-drawer__btn--admin {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.side-drawer__btn--admin:hover {
+  background: var(--gold);
+  border-color: var(--gold);
+}

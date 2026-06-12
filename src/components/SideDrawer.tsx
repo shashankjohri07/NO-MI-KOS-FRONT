@@ -10,7 +10,7 @@ interface SideDrawerProps {
 
 export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
 
   useEffect(() => {
     if (isOpen) {
@@ -50,6 +50,15 @@ export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
         <div className="side-drawer__content">
           {user ? (
             <>
+              {/* Admin-only workspace switch — normal users never see this. */}
+              {isAdmin && (
+                <button
+                  className="side-drawer__btn side-drawer__btn--admin"
+                  onClick={() => { onClose(); navigate('/admin'); }}
+                >
+                  ◆ Admin Workspace
+                </button>
+              )}
               <button className="side-drawer__btn" onClick={() => { onClose(); navigate('/detect-errors'); }}>
                 Detect Errors
               </button>
