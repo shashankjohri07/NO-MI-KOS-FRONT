@@ -321,3 +321,26 @@
 @media (max-width: 720px) {
   .adm__charts { grid-template-columns: 1fr; }
 }
+
+/* --- live indicator -------------------------------------------------------- */
+.adm__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+.adm__live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2ea043;
+  animation: admPulse 2s ease-in-out infinite;
+}
+@keyframes admPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}

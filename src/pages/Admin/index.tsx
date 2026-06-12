@@ -46,6 +46,20 @@ export default function Admin() {
     })();
   }, [navigate, refresh]);
 
+  // Live dashboard: re-poll the stats every 30s so new signups show up without
+  // a manual reload. Only the lightweight stats call is polled (events/admins
+  // refresh on their own actions). Paused while the tab is hidden to avoid
+  // pointless background traffic.
+  useEffect(() => {
+    if (!who?.isAdmin) return;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        adminApi.stats().then(setStats).catch(() => {});
+      }
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [who]);
+
   if (!who) return <div className="adm"><p className="adm__loading">Checking access…</p></div>;
   if (!who.isAdmin) return null; // redirecting
 
@@ -67,6 +81,7 @@ export default function Admin() {
           <p className="adm__subtitle">
             Signed in as <strong>{who.email}</strong>
           </p>
+          <span className="adm__live"><span className="adm__live-dot" /> Live — updates automatically</span>
         </header>
 
         <StatsSection stats={stats} />
