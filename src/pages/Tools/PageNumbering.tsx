@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { documentApi } from '../../services/documentApi';
+import { documentApi, trackTool } from '../../services/documentApi';
 import MainFileStep from '../ErrorReport/MainFileStep';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
@@ -58,6 +58,7 @@ export default function PageNumberingTool() {
     try {
       const { blob, filename } = await documentApi.writePagination(main.files, safeIndexEnd());
       triggerDownload(blob, filename);
+      trackTool('page-numbering');
       setPhase('done');
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');

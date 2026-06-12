@@ -60,6 +60,19 @@ export interface AdminEntry {
   protected: boolean;
 }
 
+export interface ToolStat {
+  tool: string;
+  count: number;
+}
+
+export interface FeedbackEntry {
+  id: string;
+  email: string | null;
+  message: string;
+  tool: string | null;
+  created_at: string;
+}
+
 export const adminApi = {
   async whoami(): Promise<Whoami> {
     try {
@@ -107,6 +120,20 @@ export const adminApi = {
   async removeAdmin(email: string): Promise<void> {
     const r = await client.delete<{ ok: boolean; error?: string }>('/admin/admins', { data: { email } });
     if (!r.data.ok) throw new Error(r.data.error || 'Failed to remove admin');
+  },
+
+  async getToolStats(): Promise<ToolStat[]> {
+    try {
+      const r = await client.get<{ ok: boolean; stats: ToolStat[] }>('/admin/tool-stats');
+      return r.data.stats ?? [];
+    } catch { return []; }
+  },
+
+  async listFeedback(): Promise<FeedbackEntry[]> {
+    try {
+      const r = await client.get<{ ok: boolean; entries: FeedbackEntry[] }>('/admin/feedback');
+      return r.data.entries ?? [];
+    } catch { return []; }
   },
 
   async testSend(input: Omit<CreateEventInput, 'sendNow'>): Promise<{ sent: number; dryRun: boolean }> {

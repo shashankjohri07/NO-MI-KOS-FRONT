@@ -1,5 +1,6 @@
 import Navbar from './components/Navbar';
 import AppRoutes from './routes/AppRoutes';
+import FeedbackButton from './components/FeedbackButton';
 import { ContentProvider } from './context/ContentContext';
 import { AuthProvider } from './context/AuthContext';
 import logger from './utils/logger';
@@ -14,6 +15,7 @@ export default function App() {
       <ContentProvider>
         <Navbar />
         <AppRoutes />
+        <FeedbackButton />
       </ContentProvider>
     </AuthProvider>
   );

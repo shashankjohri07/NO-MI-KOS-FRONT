@@ -410,3 +410,80 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.75); }
 }
+
+/* --- tool usage stats -------------------------------------------------------- */
+.adm__tool-stats { display: flex; flex-direction: column; gap: 0.7rem; }
+.adm__tool-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 40px;
+  align-items: center;
+  gap: 0.75rem;
+}
+.adm__tool-name {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.adm__tool-bar-wrap {
+  background: #f0ece2;
+  border-radius: 4px;
+  height: 10px;
+  overflow: hidden;
+}
+.adm__tool-bar {
+  height: 100%;
+  background: var(--ink);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+  min-width: 4px;
+}
+.adm__tool-count {
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: right;
+}
+
+/* --- feedback list ----------------------------------------------------------- */
+.adm__feedback-list { list-style: none; margin: 0; padding: 0; }
+.adm__feedback-item {
+  padding: 0.85rem 0;
+  border-bottom: 1px solid #f1ece0;
+}
+.adm__feedback-item:last-child { border-bottom: none; }
+.adm__feedback-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.35rem;
+  flex-wrap: wrap;
+}
+.adm__feedback-email {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.adm__feedback-tag {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  background: #efe9da;
+  color: var(--muted);
+  padding: 0.1rem 0.5rem;
+  border-radius: 20px;
+}
+.adm__feedback-date {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+.adm__feedback-msg {
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  color: var(--ink);
+  margin: 0;
+  line-height: 1.5;
+}

@@ -1,0 +1,106 @@
+.fb {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.fb__trigger {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.fb__trigger:hover { transform: scale(1.08); }
+.fb__trigger--open { background: #444; }
+
+.fb__panel {
+  background: #fff;
+  border: 1px solid #e8e2d4;
+  border-radius: 14px;
+  padding: 1.1rem 1.2rem;
+  width: 300px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  animation: fbSlideIn 0.18s ease;
+}
+
+@keyframes fbSlideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fb__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.fb__title {
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.fb__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding: 0.1rem 0.3rem;
+}
+.fb__close:hover { color: var(--ink); }
+
+.fb__textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #d6d0c2;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: var(--ink);
+  resize: none;
+  outline: none;
+}
+.fb__textarea:focus { border-color: var(--ink); }
+
+.fb__submit {
+  margin-top: 0.65rem;
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0.55rem;
+  background: var(--ink);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.fb__submit:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.fb__thanks {
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  color: #1a6b2f;
+  text-align: center;
+  padding: 0.5rem 0;
+  margin: 0;
+}

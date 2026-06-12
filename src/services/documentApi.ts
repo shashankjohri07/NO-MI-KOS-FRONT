@@ -253,4 +253,13 @@ async function waitForBackendAwake(maxMs = 90000): Promise<void> {
   }
 }
 
+/** Fire-and-forget tool usage ping. Never throws, never blocks the caller. */
+export function trackTool(tool: string): void {
+  fetch(apiUrl('track'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool }),
+  }).catch(() => {});
+}
+
 export default documentApi;

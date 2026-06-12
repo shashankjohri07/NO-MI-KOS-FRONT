@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { documentApi } from '../../services/documentApi';
+import { documentApi, trackTool } from '../../services/documentApi';
 import MainFileStep from '../ErrorReport/MainFileStep';
 import AnnexPickStep from '../ErrorReport/AnnexPickStep';
 import SigPickStep from '../ErrorReport/SigPickStep';
@@ -80,6 +80,7 @@ export default function SignaturesTool() {
         signPages
       );
       triggerDownload(blob, filename);
+      trackTool('signatures');
       setPhase('done');
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');

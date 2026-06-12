@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { documentApi } from '../../services/documentApi';
+import { documentApi, trackTool } from '../../services/documentApi';
 import MainFileStep from '../ErrorReport/MainFileStep';
 import AnnexPickStep from '../ErrorReport/AnnexPickStep';
 import { useFileList } from '../ErrorReport/useFileList';
@@ -65,6 +65,7 @@ export default function AnnexuresTool() {
         annex.files
       );
       triggerDownload(blob, filename);
+      trackTool('annexures');
       setPhase('done');
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');

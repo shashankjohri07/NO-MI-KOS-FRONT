@@ -7,6 +7,8 @@ import {
   type DashboardStats,
   type SendSummary,
   type Whoami,
+  type ToolStat,
+  type FeedbackEntry,
 } from '../../services/adminApi';
 import { BarChart, LineChart } from './Charts';
 import '../../styles/Admin.css';
@@ -22,13 +24,20 @@ export default function Admin() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [admins, setAdmins] = useState<AdminEntry[]>([]);
+  const [toolStats, setToolStats] = useState<ToolStat[]>([]);
+  const [feedback, setFeedback] = useState<FeedbackEntry[]>([]);
 
   const refresh = useCallback(async () => {
     try {
-      const [s, e, a] = await Promise.all([adminApi.stats(), adminApi.listEvents(), adminApi.listAdmins()]);
+      const [s, e, a, ts, fb] = await Promise.all([
+        adminApi.stats(), adminApi.listEvents(), adminApi.listAdmins(),
+        adminApi.getToolStats(), adminApi.listFeedback(),
+      ]);
       setStats(s);
       setEvents(e);
       setAdmins(a);
+      setToolStats(ts);
+      setFeedback(fb);
     } catch {
       /* individual sections show their own errors below */
     }
@@ -85,6 +94,10 @@ export default function Admin() {
         </header>
 
         <StatsSection stats={stats} />
+
+        <ToolStats stats={toolStats} />
+
+        <FeedbackList entries={feedback} />
 
         <ManageAdmins admins={admins} self={who.email} onChange={refresh} />
 
@@ -433,6 +446,65 @@ function PastEvents({ events }: { events: AdminEvent[] }) {
             ))}
           </tbody>
         </table>
+      )}
+    </section>
+  );
+}
+
+/* ── Tool usage stats ─────────────────────────────────────────────────────── */
+
+const TOOL_LABELS: Record<string, string> = {
+  'document-prep': 'Document Prep',
+  'page-numbering': 'Page Numbering',
+  'annexures': 'Annexures',
+  'signatures': 'Signatures',
+};
+
+function ToolStats({ stats }: { stats: ToolStat[] }) {
+  const max = Math.max(...stats.map((s) => s.count), 1);
+  return (
+    <section className="adm__card">
+      <h2 className="adm__card-title">Tool usage</h2>
+      {stats.length === 0 ? (
+        <p className="adm__empty">No usage data yet — will populate as users complete tool runs.</p>
+      ) : (
+        <div className="adm__tool-stats">
+          {stats.map((s) => (
+            <div key={s.tool} className="adm__tool-row">
+              <span className="adm__tool-name">{TOOL_LABELS[s.tool] ?? s.tool}</span>
+              <div className="adm__tool-bar-wrap">
+                <div className="adm__tool-bar" style={{ width: `${(s.count / max) * 100}%` }} />
+              </div>
+              <span className="adm__tool-count">{s.count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ── User feedback ────────────────────────────────────────────────────────── */
+
+function FeedbackList({ entries }: { entries: FeedbackEntry[] }) {
+  return (
+    <section className="adm__card">
+      <h2 className="adm__card-title">User feedback</h2>
+      {entries.length === 0 ? (
+        <p className="adm__empty">No feedback yet.</p>
+      ) : (
+        <ul className="adm__feedback-list">
+          {entries.map((f) => (
+            <li key={f.id} className="adm__feedback-item">
+              <div className="adm__feedback-meta">
+                <span className="adm__feedback-email">{f.email || 'anonymous'}</span>
+                {f.tool && <span className="adm__feedback-tag">{TOOL_LABELS[f.tool] ?? f.tool}</span>}
+                <span className="adm__feedback-date">{new Date(f.created_at).toLocaleDateString('en-IN')}</span>
+              </div>
+              <p className="adm__feedback-msg">{f.message}</p>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

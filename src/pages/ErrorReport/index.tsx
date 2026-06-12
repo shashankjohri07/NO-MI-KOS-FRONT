@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { documentApi } from '../../services/documentApi';
+import { documentApi, trackTool } from '../../services/documentApi';
 import Breadcrumb, { type BreadcrumbStep } from '../../components/Breadcrumb';
 import '../../styles/ErrorReport.css';
 import MainFileStep from './MainFileStep';
@@ -130,6 +130,7 @@ export default function ErrorReport() {
 
   const downloadAndFinish = () => {
     if (pendingBlob) triggerDownload(pendingBlob, pendingFilename);
+    trackTool('document-prep');
     handleReset();
   };
 
@@ -215,6 +216,7 @@ export default function ErrorReport() {
         { client: specialClientSig, advocate: specialAdvocateSig }
       );
       triggerDownload(blob, filename);
+      trackTool('document-prep');
       setPendingBlob(null);
       setPendingFilename('');
       bumpFurthest(5);
