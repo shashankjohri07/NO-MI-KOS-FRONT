@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '../services/authApi';
+import { subscribeForUpdates } from '../services/adminApi';
 import { useAuth } from '../context/AuthContext';
 import '../styles/Login.css';
 
@@ -43,6 +44,9 @@ export default function AuthCallback() {
           setMessage('Successfully signed in! Redirecting...');
 
           window.history.replaceState({}, document.title, window.location.pathname);
+
+          const userEmail = response.data?.user?.email;
+          if (userEmail) subscribeForUpdates(userEmail);
 
           await checkAuth();
           setTimeout(() => navigate('/detect-errors'), 1500);
