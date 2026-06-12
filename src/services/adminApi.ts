@@ -108,6 +108,15 @@ export const adminApi = {
     const r = await client.delete<{ ok: boolean; error?: string }>('/admin/admins', { data: { email } });
     if (!r.data.ok) throw new Error(r.data.error || 'Failed to remove admin');
   },
+
+  async testSend(input: Omit<CreateEventInput, 'sendNow'>): Promise<{ sent: number; dryRun: boolean }> {
+    const r = await client.post<{ ok: boolean; sent: number; dryRun: boolean; error?: string }>(
+      '/admin/events/test-send',
+      input,
+    );
+    if (!r.data.ok) throw new Error(r.data.error || 'Failed to send test email');
+    return { sent: r.data.sent, dryRun: r.data.dryRun };
+  },
 };
 
 /** Fire-and-forget: register the signed-in user's email for event updates.

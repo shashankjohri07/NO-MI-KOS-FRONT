@@ -88,7 +88,7 @@ export default function Admin() {
 
         <ManageAdmins admins={admins} self={who.email} onChange={refresh} />
 
-        <NewEvent subscriberCount={stats?.totalUsers ?? 0} onCreated={refresh} />
+        <NewEvent subscriberCount={stats?.totalUsers ?? 0} onCreated={refresh} selfEmail={who.email} />
 
         <PastEvents events={events} />
       </div>
@@ -224,14 +224,56 @@ function ManageAdmins({ admins, self, onChange }: { admins: AdminEntry[]; self?:
 
 /* ── New event ────────────────────────────────────────────────────────────── */
 
-function NewEvent({ subscriberCount, onCreated }: { subscriberCount: number; onCreated: () => void }) {
+function renderPreviewHtml(
+  title: string, description: string,
+  eventDate: string, imageUrl: string, linkUrl: string,
+): string {
+  const dateStr = eventDate
+    ? new Date(eventDate + 'T00:00:00').toLocaleDateString('en-IN', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      })
+    : '';
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const paragraphs = (description || ' ')
+    .split(/\n+/)
+    .map((p) => `<p style="margin:0 0 12px;line-height:1.6;color:#333;">${esc(p)}</p>`)
+    .join('');
+  return `<!doctype html>
+<html><body style="margin:0;padding:0;background:#f4f1ea;font-family:Georgia,'Times New Roman',serif;">
+  <div style="max-width:560px;margin:0 auto;padding:32px 16px;">
+    <div style="text-align:center;padding:18px 0 26px;">
+      <span style="font-size:30px;font-weight:bold;color:#1a1a1a;letter-spacing:-0.5px;">Nomikos</span><span style="font-size:30px;font-weight:bold;color:#b8962e;">.</span>
+    </div>
+    <div style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e8e2d4;">
+      ${imageUrl.trim() ? `<img src="${imageUrl}" alt="" width="560" style="display:block;width:100%;height:auto;" />` : ''}
+      <div style="padding:28px 30px;">
+        <h1 style="margin:0 0 6px;font-size:24px;color:#1a1a1a;">${esc(title || 'Untitled')}</h1>
+        ${dateStr ? `<p style="margin:0 0 18px;font-size:14px;color:#b8962e;font-weight:bold;">${dateStr}</p>` : ''}
+        ${paragraphs}
+        ${linkUrl.trim() ? `<div style="text-align:center;margin:26px 0 8px;"><a href="${linkUrl}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;">View details</a></div>` : ''}
+      </div>
+    </div>
+    <p style="text-align:center;font-size:11px;color:#999;margin-top:22px;line-height:1.6;">
+      You are receiving this because you have an account on Nomikos.<br/>
+      Reply to this email to unsubscribe from event updates.
+    </p>
+  </div>
+</body></html>`;
+}
+
+function NewEvent({ subscriberCount, onCreated, selfEmail }: { subscriberCount: number; onCreated: () => void; selfEmail?: string }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [busy, setBusy] = useState(false);
+  const [testBusy, setTestBusy] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const previewHtml = renderPreviewHtml(title, description, eventDate, imageUrl, linkUrl);
 
   const submit = async (sendNow: boolean) => {
     if (!title.trim() || !description.trim()) {
@@ -259,51 +301,108 @@ function NewEvent({ subscriberCount, onCreated }: { subscriberCount: number; onC
     }
   };
 
+  const sendTest = async () => {
+    if (!title.trim() || !description.trim()) {
+      setNotice({ kind: 'err', text: 'Title and description are required for a test send.' });
+      return;
+    }
+    setTestBusy(true);
+    setNotice(null);
+    try {
+      const r = await adminApi.testSend({
+        title: title.trim(),
+        description: description.trim(),
+        event_date: eventDate,
+        image_url: imageUrl.trim() || undefined,
+        link_url: linkUrl.trim() || undefined,
+      });
+      setNotice({
+        kind: 'ok',
+        text: r.dryRun
+          ? 'DRY RUN — no provider configured. Email was not sent.'
+          : `Test email sent to ${selfEmail || 'you'}.`,
+      });
+    } catch (e) {
+      setNotice({ kind: 'err', text: e instanceof Error ? e.message : 'Test send failed.' });
+    } finally {
+      setTestBusy(false);
+    }
+  };
+
   return (
     <section className="adm__card">
-      <h2 className="adm__card-title">New event</h2>
-
-      <label className="adm__label" htmlFor="adm-title">Title *</label>
-      <input id="adm-title" className="adm__input" value={title} maxLength={200}
-             placeholder="e.g. Nomikos Legal-Tech Webinar" onChange={(e) => setTitle(e.target.value)} />
-
-      <label className="adm__label" htmlFor="adm-desc">Description *</label>
-      <textarea id="adm-desc" className="adm__textarea" value={description} rows={5} maxLength={5000}
-                placeholder="What is the event about? This text goes into the email."
-                onChange={(e) => setDescription(e.target.value)} />
-
-      <div className="adm__row">
-        <div className="adm__col">
-          <label className="adm__label" htmlFor="adm-date">Event date</label>
-          <input id="adm-date" type="date" className="adm__input" value={eventDate}
-                 onChange={(e) => setEventDate(e.target.value)} />
-        </div>
-        <div className="adm__col">
-          <label className="adm__label" htmlFor="adm-link">Details / registration link</label>
-          <input id="adm-link" type="url" className="adm__input" value={linkUrl}
-                 placeholder="https://…" onChange={(e) => setLinkUrl(e.target.value)} />
-        </div>
+      <div className="adm__card-header">
+        <h2 className="adm__card-title" style={{ margin: 0 }}>New event</h2>
+        <button
+          type="button"
+          className={`adm__btn adm__btn--outline adm__btn--sm${showPreview ? ' adm__btn--active' : ''}`}
+          onClick={() => setShowPreview((v) => !v)}
+        >
+          {showPreview ? 'Hide preview' : 'Preview email'}
+        </button>
       </div>
 
-      <label className="adm__label" htmlFor="adm-img">Banner image URL</label>
-      <input id="adm-img" type="url" className="adm__input" value={imageUrl}
-             placeholder="https://… (shown at the top of the email)"
-             onChange={(e) => setImageUrl(e.target.value)} />
-      {imageUrl.trim() && (
-        <img className="adm__img-preview" src={imageUrl} alt="banner preview"
-             onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />
-      )}
+      <div className={`adm__compose${showPreview ? ' adm__compose--split' : ''}`}>
+        <div className="adm__compose-form">
+          <label className="adm__label" htmlFor="adm-title">Title *</label>
+          <input id="adm-title" className="adm__input" value={title} maxLength={200}
+                 placeholder="e.g. Nomikos Legal-Tech Webinar" onChange={(e) => setTitle(e.target.value)} />
+
+          <label className="adm__label" htmlFor="adm-desc">Description *</label>
+          <textarea id="adm-desc" className="adm__textarea" value={description} rows={5} maxLength={5000}
+                    placeholder="What is the event about? This text goes into the email."
+                    onChange={(e) => setDescription(e.target.value)} />
+
+          <div className="adm__row">
+            <div className="adm__col">
+              <label className="adm__label" htmlFor="adm-date">Event date</label>
+              <input id="adm-date" type="date" className="adm__input" value={eventDate}
+                     onChange={(e) => setEventDate(e.target.value)} />
+            </div>
+            <div className="adm__col">
+              <label className="adm__label" htmlFor="adm-link">Details / registration link</label>
+              <input id="adm-link" type="url" className="adm__input" value={linkUrl}
+                     placeholder="https://…" onChange={(e) => setLinkUrl(e.target.value)} />
+            </div>
+          </div>
+
+          <label className="adm__label" htmlFor="adm-img">Banner image URL</label>
+          <input id="adm-img" type="url" className="adm__input" value={imageUrl}
+                 placeholder="https://… (shown at the top of the email)"
+                 onChange={(e) => setImageUrl(e.target.value)} />
+          {imageUrl.trim() && !showPreview && (
+            <img className="adm__img-preview" src={imageUrl} alt="banner preview"
+                 onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />
+          )}
+        </div>
+
+        {showPreview && (
+          <div className="adm__compose-preview">
+            <p className="adm__preview-label">Live preview</p>
+            <iframe
+              className="adm__preview-iframe"
+              srcDoc={previewHtml}
+              title="Email preview"
+              sandbox="allow-same-origin"
+            />
+          </div>
+        )}
+      </div>
 
       {notice && <p className={`adm__notice adm__notice--${notice.kind}`}>{notice.text}</p>}
 
       <div className="adm__actions">
-        <button type="button" className="adm__btn adm__btn--primary" disabled={busy}
+        <button type="button" className="adm__btn adm__btn--primary" disabled={busy || testBusy}
                 onClick={() => submit(true)}>
           {busy ? 'Working…' : `Create & email ${subscriberCount} user${subscriberCount === 1 ? '' : 's'}`}
         </button>
-        <button type="button" className="adm__btn adm__btn--outline" disabled={busy}
+        <button type="button" className="adm__btn adm__btn--outline" disabled={busy || testBusy}
                 onClick={() => submit(false)}>
           Save without sending
+        </button>
+        <button type="button" className="adm__btn adm__btn--ghost" disabled={busy || testBusy}
+                onClick={sendTest} title={`Send a test to ${selfEmail || 'yourself'}`}>
+          {testBusy ? 'Sending…' : 'Send test to me'}
         </button>
       </div>
     </section>
