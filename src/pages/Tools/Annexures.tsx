@@ -1,16 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
-import MainFileStep from '../ErrorReport/MainFileStep';
-import AnnexPickStep from '../ErrorReport/AnnexPickStep';
+import Dropzone from '../ErrorReport/Dropzone';
+import FileList from '../ErrorReport/FileList';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
-
-// No hard caps — transport-layer limits (multer/nginx) still apply.
 
 export default function AnnexuresTool() {
   const main = useFileList();
   const annex = useFileList();
-  const [indexEndPage, setIndexEndPage] = useState('');
   const [phase, setPhase] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -32,24 +29,9 @@ export default function AnnexuresTool() {
     };
   }, [phase]);
 
-  const triggerDownload = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const safeIndexEnd = () => {
-    const n = Number.parseInt(indexEndPage, 10);
-    return Number.isFinite(n) && n >= 0 ? n : 0;
-  };
-
   const reset = () => {
     main.reset();
     annex.reset();
-    setIndexEndPage('');
     setPhase('idle');
     setErrorMsg('');
   };
@@ -59,12 +41,13 @@ export default function AnnexuresTool() {
     setErrorMsg('');
     setPhase('processing');
     try {
-      const { blob, filename } = await documentApi.writePagination(
-        main.files,
-        safeIndexEnd(),
-        annex.files
-      );
-      triggerDownload(blob, filename);
+      const { blob, filename } = await documentApi.writePagination(main.files, 0, annex.files);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
       trackTool('annexures');
       setPhase('done');
     } catch (err: unknown) {
@@ -73,14 +56,16 @@ export default function AnnexuresTool() {
     }
   };
 
+  const canSubmit = main.files.length > 0 && annex.files.length > 0;
+
   return (
     <div className="er">
       <div className="er__container">
         <header className="er__header">
           <h1 className="er__title">Annexures</h1>
           <p className="er__subtitle">
-            Upload your main document(s) and annexure files. The main doc gets numbered, then each
-            annexure is stamped (A-1, A-2, …) and appended with continuous pagination.
+            Upload your main document and annexure files. Each annexure gets stamped (A-1, A-2, …)
+            and appended with continuous pagination.
           </p>
         </header>
 
@@ -88,32 +73,51 @@ export default function AnnexuresTool() {
           <>
             <section className="er__upload-section">
               <h2 className="er__section-heading">Main document</h2>
-              <MainFileStep
-                files={main.files}
+              <Dropzone
+                inputId="annex-main-upload"
                 inputRef={main.inputRef}
+                hasFiles={main.files.length > 0}
+                mainText={main.files.length ? 'Add another volume' : 'Drop your PDFs here or click to browse'}
+                hintText={main.files.length ? 'Files are merged in the order listed below' : 'Upload one or multiple PDFs — up to 100MB each'}
                 onAdd={main.add}
-                onMove={main.move}
-                onRemove={main.remove}
-                indexEndPage={indexEndPage}
-                setIndexEndPage={setIndexEndPage}
-                onSubmit={submit}
-                isProcessing={phase === 'processing'}
-                hideSubmit
               />
+              {main.files.length > 0 && (
+                <FileList
+                  files={main.files}
+                  rowLabel={(i) => `Vol ${i + 1}`}
+                  onMove={main.move}
+                  onRemove={main.remove}
+                  disabled={phase === 'processing'}
+                />
+              )}
             </section>
 
             <section className="er__upload-section">
               <h2 className="er__section-heading">Annexures</h2>
-              <AnnexPickStep
-                files={annex.files}
+              <Dropzone
+                inputId="annex-annex-upload"
                 inputRef={annex.inputRef}
+                hasFiles={annex.files.length > 0}
+                mainText={annex.files.length ? 'Add another annexure' : 'Drop annexure PDFs here'}
+                hintText="File 1 → Annexure A-1, File 2 → Annexure A-2, … (in upload order)"
                 onAdd={annex.add}
-                onMove={annex.move}
-                onRemove={annex.remove}
-                onSubmit={submit}
-                onCancel={reset}
               />
+              {annex.files.length > 0 && (
+                <FileList
+                  files={annex.files}
+                  rowLabel={(i) => `A-${i + 1}`}
+                  onMove={annex.move}
+                  onRemove={annex.remove}
+                  disabled={phase === 'processing'}
+                />
+              )}
             </section>
+
+            {canSubmit && phase !== 'processing' && (
+              <button type="button" className="er__btn er__btn--primary" onClick={submit}>
+                Merge Annexures
+              </button>
+            )}
 
             {phase === 'processing' && (
               <div className="er__processing">
@@ -134,8 +138,7 @@ export default function AnnexuresTool() {
           <section className="er__upload-section">
             <div className="er__annex-prompt">
               <p className="er__annex-prompt-title">
-                ✓ PDF downloaded with {annex.files.length} annexure
-                {annex.files.length === 1 ? '' : 's'}.
+                ✓ PDF downloaded with {annex.files.length} annexure{annex.files.length === 1 ? '' : 's'}.
               </p>
               <button type="button" className="er__btn er__btn--primary" onClick={reset}>
                 Start Another

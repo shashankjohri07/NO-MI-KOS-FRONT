@@ -1,26 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
-import MainFileStep from '../ErrorReport/MainFileStep';
-import AnnexPickStep from '../ErrorReport/AnnexPickStep';
-import SigPickStep from '../ErrorReport/SigPickStep';
+import Dropzone from '../ErrorReport/Dropzone';
+import FileList from '../ErrorReport/FileList';
 import { useFileList } from '../ErrorReport/useFileList';
+import { parsePageSpec, formatPageSet } from '../ErrorReport/pageSpec';
 import '../../styles/ErrorReport.css';
 
-// No hard caps — transport-layer limits (multer/nginx) still apply.
-
 export default function SignaturesTool() {
-  const main = useFileList();
-  const annex = useFileList();
+  const doc = useFileList();
   const [clientSig, setClientSig] = useState<File | null>(null);
   const [advocateSig, setAdvocateSig] = useState<File | null>(null);
-  const [signPages, setSignPages] = useState<string>('');
-  const [indexEndPage, setIndexEndPage] = useState('');
+  const [signPages, setSignPages] = useState('');
   const [phase, setPhase] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const elapsedRef = useRef<number | null>(null);
-  const clientSigInputRef = useRef<HTMLInputElement>(null);
-  const advocateSigInputRef = useRef<HTMLInputElement>(null);
+  const clientRef = useRef<HTMLInputElement>(null);
+  const advocateRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     documentApi.warmUp();
@@ -38,48 +34,53 @@ export default function SignaturesTool() {
     };
   }, [phase]);
 
-  const triggerDownload = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const safeIndexEnd = () => {
-    const n = Number.parseInt(indexEndPage, 10);
-    return Number.isFinite(n) && n >= 0 ? n : 0;
-  };
+  const pagePreview = useMemo(() => {
+    const trimmed = signPages.trim();
+    if (!trimmed) return { kind: 'empty' as const };
+    try {
+      const set = parsePageSpec(trimmed);
+      if (set.size === 0) return { kind: 'empty' as const };
+      return { kind: 'ok' as const, label: formatPageSet(set), count: set.size };
+    } catch (e) {
+      return { kind: 'error' as const, message: e instanceof Error ? e.message : 'Invalid format' };
+    }
+  }, [signPages]);
 
   const reset = () => {
-    main.reset();
-    annex.reset();
+    doc.reset();
     setClientSig(null);
     setAdvocateSig(null);
     setSignPages('');
-    setIndexEndPage('');
     setPhase('idle');
     setErrorMsg('');
-    if (clientSigInputRef.current) clientSigInputRef.current.value = '';
-    if (advocateSigInputRef.current) advocateSigInputRef.current.value = '';
+    if (clientRef.current) clientRef.current.value = '';
+    if (advocateRef.current) advocateRef.current.value = '';
   };
 
+  const hasSig = !!clientSig || !!advocateSig;
+  const pagesValid = signPages.trim() === '' || pagePreview.kind === 'ok';
+  const canSubmit = doc.files.length > 0 && hasSig && pagesValid;
+
   const submit = async () => {
-    if (main.files.length === 0 || annex.files.length === 0) return;
-    if (!clientSig && !advocateSig) return;
+    if (!canSubmit) return;
     setErrorMsg('');
     setPhase('processing');
     try {
       const { blob, filename } = await documentApi.writePagination(
-        main.files,
-        safeIndexEnd(),
-        annex.files,
-        { client: clientSig, advocate: advocateSig },
+        doc.files,
+        0,
+        [],
         undefined,
-        signPages
+        undefined,
+        signPages.trim() || undefined,
+        { client: clientSig, advocate: advocateSig },
       );
-      triggerDownload(blob, filename);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
       trackTool('signatures');
       setPhase('done');
     } catch (err: unknown) {
@@ -94,60 +95,105 @@ export default function SignaturesTool() {
         <header className="er__header">
           <h1 className="er__title">Signatures</h1>
           <p className="er__subtitle">
-            Upload main document, annexures, and signature images. The complete pipeline runs in
-            one shot: number → merge annexures → stamp client/advocate signatures on every
-            annexure page.
+            Upload your document, choose which pages to sign, and provide signature images.
           </p>
         </header>
 
         {(phase === 'idle' || phase === 'processing') && (
           <>
             <section className="er__upload-section">
-              <h2 className="er__section-heading">Main document</h2>
-              <MainFileStep
-                files={main.files}
-                inputRef={main.inputRef}
-                onAdd={main.add}
-                onMove={main.move}
-                onRemove={main.remove}
-                indexEndPage={indexEndPage}
-                setIndexEndPage={setIndexEndPage}
-                onSubmit={submit}
-                isProcessing={phase === 'processing'}
-                hideSubmit
+              <h2 className="er__section-heading">Document</h2>
+              <Dropzone
+                inputId="sig-doc-upload"
+                inputRef={doc.inputRef}
+                hasFiles={doc.files.length > 0}
+                mainText={doc.files.length ? 'Add another volume' : 'Drop your PDF here or click to browse'}
+                hintText={doc.files.length ? 'Files are merged in order' : 'Upload one or multiple PDFs — up to 100MB each'}
+                onAdd={doc.add}
               />
+              {doc.files.length > 0 && (
+                <FileList
+                  files={doc.files}
+                  rowLabel={(i) => `Vol ${i + 1}`}
+                  onMove={doc.move}
+                  onRemove={doc.remove}
+                  disabled={phase === 'processing'}
+                />
+              )}
             </section>
 
             <section className="er__upload-section">
-              <h2 className="er__section-heading">Annexures</h2>
-              <AnnexPickStep
-                files={annex.files}
-                inputRef={annex.inputRef}
-                onAdd={annex.add}
-                onMove={annex.move}
-                onRemove={annex.remove}
-                onSubmit={submit}
-                onCancel={reset}
-                hideSubmit
-                hideCancel
-              />
+              <h2 className="er__section-heading">Pages to sign</h2>
+              <div className="er__sig-extra">
+                <input
+                  id="sig-pages"
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="er__sig-extra-input"
+                  placeholder="e.g. 1, 3-5, 8  — leave blank to sign all pages"
+                  value={signPages}
+                  onChange={(e) => setSignPages(e.target.value)}
+                />
+                <p className="er__sig-extra-hint">
+                  Comma-separated page numbers and ranges. Leave blank to stamp every page.
+                </p>
+                {pagePreview.kind === 'ok' && (
+                  <p className="er__sig-extra-preview">
+                    ✓ Will sign {pagePreview.count} page{pagePreview.count === 1 ? '' : 's'}: {pagePreview.label}
+                  </p>
+                )}
+                {pagePreview.kind === 'error' && (
+                  <p className="er__sig-extra-error">⚠ {pagePreview.message}</p>
+                )}
+              </div>
             </section>
 
             <section className="er__upload-section">
               <h2 className="er__section-heading">Signatures</h2>
-              <SigPickStep
-                clientSig={clientSig}
-                advocateSig={advocateSig}
-                clientInputRef={clientSigInputRef}
-                advocateInputRef={advocateSigInputRef}
-                onClientChange={setClientSig}
-                onAdvocateChange={setAdvocateSig}
-                signPages={signPages}
-                onSignPagesChange={setSignPages}
-                onSubmit={submit}
-                onCancel={reset}
-              />
+              <div className="er__sig-grid">
+                <div className="er__sig-slot">
+                  <label className="er__sig-slot-label" htmlFor="sig-client">
+                    Client Signature (PNG / JPG)
+                  </label>
+                  <input
+                    ref={clientRef}
+                    id="sig-client"
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    className="er__sig-slot-input"
+                    onChange={(e) => setClientSig(e.target.files?.[0] ?? null)}
+                  />
+                  {clientSig && (
+                    <p className="er__sig-slot-name">✓ {clientSig.name} ({(clientSig.size / 1024).toFixed(1)} KB)</p>
+                  )}
+                </div>
+                <div className="er__sig-slot">
+                  <label className="er__sig-slot-label" htmlFor="sig-advocate">
+                    Advocate Signature (PNG / JPG)
+                  </label>
+                  <input
+                    ref={advocateRef}
+                    id="sig-advocate"
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    className="er__sig-slot-input"
+                    onChange={(e) => setAdvocateSig(e.target.files?.[0] ?? null)}
+                  />
+                  {advocateSig && (
+                    <p className="er__sig-slot-name">✓ {advocateSig.name} ({(advocateSig.size / 1024).toFixed(1)} KB)</p>
+                  )}
+                </div>
+              </div>
+              <p className="er__sig-hint">Upload at least one signature to continue.</p>
             </section>
+
+            {canSubmit && phase !== 'processing' && (
+              <button type="button" className="er__btn er__btn--primary" onClick={submit}>
+                Stamp Signatures
+              </button>
+            )}
 
             {phase === 'processing' && (
               <div className="er__processing">
@@ -167,7 +213,7 @@ export default function SignaturesTool() {
         {phase === 'done' && (
           <section className="er__upload-section">
             <div className="er__annex-prompt">
-              <p className="er__annex-prompt-title">✓ Final PDF downloaded with signatures.</p>
+              <p className="er__annex-prompt-title">✓ PDF downloaded with signatures.</p>
               <button type="button" className="er__btn er__btn--primary" onClick={reset}>
                 Start Another
               </button>
