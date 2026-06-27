@@ -128,10 +128,44 @@ export default function ErrorReport() {
     if (specialAdvocateSigInputRef.current) specialAdvocateSigInputRef.current.value = '';
   };
 
-  const downloadAndFinish = () => {
-    if (pendingBlob) triggerDownload(pendingBlob, pendingFilename);
-    trackTool('document-prep');
-    handleReset();
+  const downloadAndFinish = async () => {
+    if (pendingBlob) {
+      triggerDownload(pendingBlob, pendingFilename);
+      trackTool('document-prep');
+      handleReset();
+      return;
+    }
+    // Page numbering was skipped — process the accumulated files now.
+    if (main.files.length === 0) { handleReset(); return; }
+    setStep('processing');
+    try {
+      const { blob, filename } = await documentApi.writePagination(
+        main.files,
+        safeIndexEnd(),
+        annex.files.length > 0 ? annex.files : undefined,
+      );
+      triggerDownload(blob, filename);
+      trackTool('document-prep');
+      handleReset();
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
+      setStep('error');
+    }
+  };
+
+  const skipPageNumbering = () => {
+    bumpFurthest(2);
+    setStep('annex-ask');
+  };
+
+  // Skip annexures from pick-annex: download the numbered blob and stop.
+  // Cancel from pick-annex: same — don't nuke the numbered work the user already did.
+  const skipAnnexures = () => downloadAndFinish();
+
+  // Skip signatures from pick-sig: keep the annexed blob, proceed to special-ask.
+  const skipSignatures = () => {
+    bumpFurthest(4);
+    setStep('special-ask');
   };
 
   const jumpToStep = (i: number) => {
@@ -283,6 +317,7 @@ export default function ErrorReport() {
               setIndexEndPage={setIndexEndPage}
               onSubmit={submitMainOnly}
               isProcessing={step === 'processing'}
+              onSkip={skipPageNumbering}
             />
 
             {step === 'processing' && (
@@ -340,7 +375,8 @@ export default function ErrorReport() {
               onMove={annex.move}
               onRemove={annex.remove}
               onSubmit={submitWithAnnexures}
-              onCancel={handleReset}
+              onCancel={skipAnnexures}
+              onSkip={skipAnnexures}
             />
           </section>
         )}
@@ -390,7 +426,8 @@ export default function ErrorReport() {
               onClientChange={setClientSig}
               onAdvocateChange={setAdvocateSig}
               onSubmit={submitWithSignatures}
-              onCancel={handleReset}
+              onCancel={skipSignatures}
+              onSkip={skipSignatures}
             />
           </section>
         )}
@@ -442,7 +479,8 @@ export default function ErrorReport() {
               onClientChange={setSpecialClientSig}
               onAdvocateChange={setSpecialAdvocateSig}
               onSubmit={submitWithSpecial}
-              onCancel={handleReset}
+              onCancel={downloadAndFinish}
+              onSkip={downloadAndFinish}
             />
           </section>
         )}

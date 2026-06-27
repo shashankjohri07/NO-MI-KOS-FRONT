@@ -16,6 +16,8 @@ interface Props {
   onSignPagesChange?: (v: string) => void;
   onSubmit: () => void;
   onCancel: () => void;
+  /** When provided, shows a "Skip signatures →" button. */
+  onSkip?: () => void;
 }
 
 /**
@@ -39,6 +41,7 @@ export default function SigPickStep({
   onSignPagesChange,
   onSubmit,
   onCancel,
+  onSkip,
 }: Props) {
   // Live-parse the spec so the user gets instant feedback ("you typed
   // garbage" / "you'll sign pages 1, 3-5"). The same parser runs again
@@ -144,6 +147,11 @@ export default function SigPickStep({
       {(clientSig || advocateSig) && preview.kind !== 'error' && (
         <button type="button" className="er__btn er__btn--primary" onClick={onSubmit}>
           Stamp Signatures &amp; Re-Process
+        </button>
+      )}
+      {onSkip && (
+        <button type="button" className="er__btn er__btn--outline" onClick={onSkip}>
+          Skip signatures →
         </button>
       )}
       <button type="button" className="er__btn er__btn--outline" onClick={onCancel}>

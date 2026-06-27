@@ -118,40 +118,36 @@ export default function SignaturesTool() {
               />
             </section>
 
-            {main.files.length > 0 && (
-              <section className="er__upload-section">
-                <h2 className="er__section-heading">Annexures</h2>
-                <AnnexPickStep
-                  files={annex.files}
-                  inputRef={annex.inputRef}
-                  onAdd={annex.add}
-                  onMove={annex.move}
-                  onRemove={annex.remove}
-                  onSubmit={submit}
-                  onCancel={reset}
-                  hideSubmit
-                  hideCancel
-                />
-              </section>
-            )}
+            <section className="er__upload-section">
+              <h2 className="er__section-heading">Annexures</h2>
+              <AnnexPickStep
+                files={annex.files}
+                inputRef={annex.inputRef}
+                onAdd={annex.add}
+                onMove={annex.move}
+                onRemove={annex.remove}
+                onSubmit={submit}
+                onCancel={reset}
+                hideSubmit
+                hideCancel
+              />
+            </section>
 
-            {main.files.length > 0 && annex.files.length > 0 && (
-              <section className="er__upload-section">
-                <h2 className="er__section-heading">Signatures</h2>
-                <SigPickStep
-                  clientSig={clientSig}
-                  advocateSig={advocateSig}
-                  clientInputRef={clientSigInputRef}
-                  advocateInputRef={advocateSigInputRef}
-                  onClientChange={setClientSig}
-                  onAdvocateChange={setAdvocateSig}
-                  signPages={signPages}
-                  onSignPagesChange={setSignPages}
-                  onSubmit={submit}
-                  onCancel={reset}
-                />
-              </section>
-            )}
+            <section className="er__upload-section">
+              <h2 className="er__section-heading">Signatures</h2>
+              <SigPickStep
+                clientSig={clientSig}
+                advocateSig={advocateSig}
+                clientInputRef={clientSigInputRef}
+                advocateInputRef={advocateSigInputRef}
+                onClientChange={setClientSig}
+                onAdvocateChange={setAdvocateSig}
+                signPages={signPages}
+                onSignPagesChange={setSignPages}
+                onSubmit={submit}
+                onCancel={reset}
+              />
+            </section>
 
             {phase === 'processing' && (
               <div className="er__processing">

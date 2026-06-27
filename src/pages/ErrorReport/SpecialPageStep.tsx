@@ -20,6 +20,9 @@ interface Props {
   onAdvocateChange: (f: File | null) => void;
   onSubmit: () => void;
   onCancel: () => void;
+  /** When provided, shows a "Skip & Download →" button to download the pending
+   * blob without running the special-pages pass. */
+  onSkip?: () => void;
 }
 
 /**
@@ -45,6 +48,7 @@ export default function SpecialPageStep({
   onAdvocateChange,
   onSubmit,
   onCancel,
+  onSkip,
 }: Props) {
   // Object URL for the embedded PDF preview; created from the current blob and
   // revoked when it changes / the step unmounts to avoid leaking memory.
@@ -171,6 +175,11 @@ export default function SpecialPageStep({
       {canSubmit && (
         <button type="button" className="er__btn er__btn--primary" onClick={onSubmit}>
           Stamp Special Pages &amp; Finish
+        </button>
+      )}
+      {onSkip && (
+        <button type="button" className="er__btn er__btn--outline" onClick={onSkip}>
+          Skip & Download →
         </button>
       )}
       <button type="button" className="er__btn er__btn--outline" onClick={onCancel}>

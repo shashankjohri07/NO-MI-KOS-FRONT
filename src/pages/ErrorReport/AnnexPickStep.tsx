@@ -14,6 +14,8 @@ interface Props {
   maxAnnexures?: number;
   hideSubmit?: boolean;
   hideCancel?: boolean;
+  /** When provided, shows a "Skip annexures →" button. */
+  onSkip?: () => void;
 }
 
 /**
@@ -33,6 +35,7 @@ export default function AnnexPickStep({
   maxAnnexures,
   hideSubmit = false,
   hideCancel = false,
+  onSkip,
 }: Props) {
   return (
     <>
@@ -63,6 +66,11 @@ export default function AnnexPickStep({
       {files.length > 0 && !hideSubmit && (
         <button type="button" className="er__btn er__btn--primary" onClick={onSubmit}>
           Merge Annexures &amp; Re-Number
+        </button>
+      )}
+      {onSkip && (
+        <button type="button" className="er__btn er__btn--outline" onClick={onSkip}>
+          Skip annexures →
         </button>
       )}
       {!hideCancel && (

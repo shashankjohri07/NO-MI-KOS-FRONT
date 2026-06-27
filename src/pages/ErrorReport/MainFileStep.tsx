@@ -17,6 +17,8 @@ interface Props {
   /** When true, hides the inline submit button — used when composing this
    * step into a larger form that submits everything at once. */
   hideSubmit?: boolean;
+  /** When provided, shows a "Skip page numbering →" link below the submit. */
+  onSkip?: () => void;
 }
 
 /**
@@ -37,6 +39,7 @@ export default function MainFileStep({
   isProcessing,
   maxFiles,
   hideSubmit = false,
+  onSkip,
 }: Props) {
   return (
     <>
@@ -95,6 +98,11 @@ export default function MainFileStep({
       {files.length > 0 && !isProcessing && !hideSubmit && (
         <button type="button" className="er__btn er__btn--primary" onClick={onSubmit}>
           Write Page Numbers
+        </button>
+      )}
+      {files.length > 0 && !isProcessing && !hideSubmit && onSkip && (
+        <button type="button" className="er__btn er__btn--outline" onClick={onSkip}>
+          Skip page numbering →
         </button>
       )}
     </>

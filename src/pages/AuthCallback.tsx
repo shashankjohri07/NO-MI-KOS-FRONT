@@ -49,7 +49,7 @@ export default function AuthCallback() {
           if (userEmail) subscribeForUpdates(userEmail);
 
           await checkAuth();
-          setTimeout(() => navigate('/detect-errors'), 1500);
+          setTimeout(() => navigate('/products'), 1500);
         } else {
           setStatus('error');
           setMessage(response.error || 'Failed to complete sign in. Please try again.');
