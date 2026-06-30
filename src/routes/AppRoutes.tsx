@@ -22,14 +22,7 @@ const AppRoutes = () => {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/auth/confirm" element={<AuthConfirm />} />
 
-      <Route
-        path="/products"
-        element={
-          <RequireAuth>
-            <Products />
-          </RequireAuth>
-        }
-      />
+      <Route path="/products" element={<Products />} />
       <Route
         path="/options"
         element={
