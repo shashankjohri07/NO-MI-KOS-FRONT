@@ -99,6 +99,33 @@ export interface BookmarkDetection {
   error?: string;
 }
 
+export interface IndexRow {
+  title: string;
+  description?: string;
+  pages: string;
+}
+
+export interface IndexParty {
+  lines: string[];
+  role: string;
+}
+
+export interface IndexMatter {
+  label: string;
+  parties: IndexParty[];
+}
+
+export interface IndexPayload {
+  court: string[];
+  caseLines: string[];
+  matters: IndexMatter[];
+  indexTitle: string;
+  rows: IndexRow[];
+  advocates: string[];
+  place: string;
+  date: string;
+}
+
 export const documentApi = {
   async uploadDocument(file: File): Promise<UploadedFile> {
     const formData = new FormData();
@@ -304,6 +331,44 @@ export const documentApi = {
     const cd = resp.headers.get('Content-Disposition') || '';
     const m = cd.match(/filename="([^"]+)"/);
     const fallback = `BOOKMARKED_${(fileList[0]?.name || 'document').replace(/\.pdf$/i, '')}.pdf`;
+    return { blob, filename: m ? m[1] : fallback };
+  },
+
+  // Generate a court-filing "Master Index" page from typed case details.
+  // With document files the index is prepended to the merged PDF; without,
+  // just the index page(s) come back.
+  async generateIndex(
+    payload: IndexPayload,
+    files: File[] = []
+  ): Promise<{ blob: Blob; filename: string }> {
+    const build = () => {
+      const fd = new FormData();
+      for (const f of files) fd.append('document', f);
+      fd.append('payload', JSON.stringify(payload));
+      return fd;
+    };
+
+    const GATEWAY = new Set([502, 503, 504]);
+    let resp = await fetch(apiUrl('index/generate'), { method: 'POST', body: build() });
+    if (GATEWAY.has(resp.status)) {
+      await waitForBackendAwake();
+      resp = await fetch(apiUrl('index/generate'), { method: 'POST', body: build() });
+    }
+    if (!resp.ok) {
+      const text = await resp.text();
+      try {
+        throw new Error(JSON.parse(text).error || `HTTP ${resp.status}`);
+      } catch (e) {
+        if (e instanceof Error && e.message !== text) throw e;
+        throw new Error(text || `HTTP ${resp.status}`);
+      }
+    }
+    const blob = await resp.blob();
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="([^"]+)"/);
+    const fallback = files.length
+      ? `INDEXED_${(files[0]?.name || 'document').replace(/\.pdf$/i, '')}.pdf`
+      : 'INDEX.pdf';
     return { blob, filename: m ? m[1] : fallback };
   },
 

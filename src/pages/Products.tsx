@@ -51,6 +51,16 @@ const TOOLS: Tool[] = [
     features: ['Smart heading detection', 'Review & edit before apply', 'Nested hierarchy'],
   },
   {
+    to: '/tools/index-generator',
+    tag: 'New',
+    tagVariant: 'live',
+    icon: '☰',
+    title: 'Index Generator',
+    description:
+      'Type the case details, list the contents, and download a court-ready Master Index page.',
+    features: ['NCLT / court filing format', 'Auto-fill rows from PDF', 'Attach to document'],
+  },
+  {
     to: '/prep',
     tag: 'Full Pipeline',
     tagVariant: 'soon',

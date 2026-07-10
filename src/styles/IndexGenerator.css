@@ -1,0 +1,205 @@
+/* Index Generator — form layout for case details + editable rows table.
+   Inherits the er__* shell (container, sections, buttons, processing)
+   from ErrorReport.css. */
+
+.ix__hint {
+  font-size: 0.82rem;
+  color: var(--muted, #8a8272);
+  margin-bottom: 1rem;
+}
+.ix__hint--warn {
+  color: var(--rust, #8b3a2a);
+  background: rgba(139, 58, 42, 0.08);
+  border-left: 3px solid var(--rust, #8b3a2a);
+  padding: 0.6rem 0.9rem;
+}
+
+.ix__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.ix__grid--two {
+  flex-direction: row;
+  gap: 0.9rem;
+}
+.ix__grid--two .ix__field {
+  flex: 1;
+}
+
+.ix__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.ix__field > span {
+  font-family: var(--mono, monospace);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted, #8a8272);
+}
+.ix__field input,
+.ix__field textarea,
+.ix__matter-label,
+.ix__party-fields input,
+.ix__party-fields textarea,
+.ix__row input,
+.ix__row textarea {
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: inherit;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border, #e0d9c8);
+  background: #fff;
+  resize: vertical;
+}
+
+.ix__doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+.ix__check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.ix__check input {
+  accent-color: var(--gold, #b8962e);
+}
+
+/* Matters / parties */
+.ix__matter {
+  border: 1px solid var(--border, #e0d9c8);
+  padding: 0.9rem;
+  margin-bottom: 1rem;
+  background: var(--paper, #faf7f0);
+}
+.ix__matter-head {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.ix__matter-label {
+  flex: 1;
+  font-weight: 600;
+}
+.ix__versus {
+  text-align: center;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--muted, #8a8272);
+  margin: 0.4rem 0;
+}
+.ix__party-fields {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+.ix__party-fields textarea {
+  flex: 2;
+}
+.ix__party-fields input {
+  flex: 1;
+}
+.ix__mini-btn {
+  background: none;
+  border: 1px dashed var(--border, #e0d9c8);
+  color: var(--muted, #8a8272);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  margin-top: 0.6rem;
+}
+.ix__mini-btn:hover {
+  color: var(--gold, #b8962e);
+  border-color: var(--gold, #b8962e);
+}
+
+/* Rows table */
+.ix__rows {
+  border: 1px solid var(--border, #e0d9c8);
+  margin: 1rem 0;
+}
+.ix__rows-head,
+.ix__row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border, #e0d9c8);
+}
+.ix__rows-head {
+  font-family: var(--mono, monospace);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted, #8a8272);
+  background: var(--paper, #faf7f0);
+  align-items: center;
+}
+.ix__row:last-child {
+  border-bottom: none;
+}
+.ix__col-sno {
+  flex-shrink: 0;
+  width: 1.8rem;
+  font-size: 0.8rem;
+  padding-top: 0.5rem;
+}
+.ix__rows-head .ix__col-sno {
+  padding-top: 0;
+}
+.ix__col-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.ix__col-pages {
+  flex-shrink: 0;
+  width: 5.2rem;
+}
+.ix__col-act {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.1rem;
+  padding-top: 0.35rem;
+}
+.ix__rows-head .ix__col-act {
+  width: 4.5rem;
+  padding-top: 0;
+}
+
+.ix__icon-btn {
+  background: none;
+  border: none;
+  color: var(--muted, #8a8272);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.2rem 0.35rem;
+}
+.ix__icon-btn:hover {
+  color: var(--rust, #8b3a2a);
+}
+
+@media (max-width: 640px) {
+  .ix__row {
+    flex-wrap: wrap;
+  }
+  .ix__col-pages {
+    width: 4rem;
+  }
+  .ix__grid--two {
+    flex-direction: column;
+  }
+  .ix__party-fields {
+    flex-wrap: wrap;
+  }
+}
