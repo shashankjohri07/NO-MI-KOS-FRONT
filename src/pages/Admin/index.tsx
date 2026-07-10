@@ -9,7 +9,10 @@ import {
   type Whoami,
   type ToolStat,
   type FeedbackEntry,
+  type ProductTagMap,
+  type ProductTag,
 } from '../../services/adminApi';
+import { PRODUCT_DEFS } from '../Products';
 import { BarChart, LineChart } from './Charts';
 import '../../styles/Admin.css';
 
@@ -99,6 +102,8 @@ export default function Admin() {
 
         <FeedbackList entries={feedback} />
 
+        <ProductTags />
+
         <ManageAdmins admins={admins} self={who.email} onChange={refresh} />
 
         <NewEvent subscriberCount={stats?.totalUsers ?? 0} onCreated={refresh} selfEmail={who.email} />
@@ -148,6 +153,105 @@ function StatCard({ num, label, accent }: { num: number; label: string; accent?:
       <span className="adm__stat-num">{num.toLocaleString()}</span>
       <span className="adm__stat-label">{label}</span>
     </div>
+  );
+}
+
+/* ── Product card tags ────────────────────────────────────────────────────── */
+
+const VARIANT_LABELS: Record<ProductTag['tagVariant'], string> = {
+  live: 'Green (live)',
+  soon: 'Gold (highlight)',
+  later: 'Grey (muted)',
+};
+
+function ProductTags() {
+  // Editor state starts from the built-in defaults and is overlaid with
+  // whatever the backend has saved. Saving writes the FULL map so the
+  // products page never mixes stale and fresh entries.
+  const [tags, setTags] = useState<ProductTagMap>(() =>
+    Object.fromEntries(PRODUCT_DEFS.map((p) => [p.key, { tag: p.tag, tagVariant: p.tagVariant }])),
+  );
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  useEffect(() => {
+    adminApi.getProductTags().then((saved) => {
+      if (Object.keys(saved).length > 0) setTags((t) => ({ ...t, ...saved }));
+    });
+  }, []);
+
+  const patch = (key: string, p: Partial<ProductTag>) =>
+    setTags((t) => ({ ...t, [key]: { ...t[key], ...p } }));
+
+  const save = async () => {
+    for (const [key, t] of Object.entries(tags)) {
+      if (!t.tag.trim()) {
+        setMsg({ kind: 'err', text: `Tag text for "${key}" cannot be empty.` });
+        return;
+      }
+    }
+    setBusy(true);
+    setMsg(null);
+    try {
+      await adminApi.saveProductTags(tags);
+      setMsg({ kind: 'ok', text: 'Saved — the products page shows the new tags immediately.' });
+    } catch (e) {
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Failed to save.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="adm__card">
+      <h2 className="adm__card-title">Product card tags</h2>
+      <p className="adm__hint">
+        The badge shown on each product card ("Live", "New", …). Changes apply to the live
+        products page without a code deploy.
+      </p>
+
+      <table className="adm__table">
+        <thead>
+          <tr><th>Product</th><th>Tag text</th><th>Style</th></tr>
+        </thead>
+        <tbody>
+          {PRODUCT_DEFS.map((p) => (
+            <tr key={p.key}>
+              <td>{p.title}</td>
+              <td>
+                <input
+                  className="adm__input"
+                  value={tags[p.key]?.tag ?? ''}
+                  maxLength={30}
+                  onChange={(e) => patch(p.key, { tag: e.target.value })}
+                />
+              </td>
+              <td>
+                <select
+                  className="adm__input"
+                  value={tags[p.key]?.tagVariant ?? 'live'}
+                  onChange={(e) =>
+                    patch(p.key, { tagVariant: e.target.value as ProductTag['tagVariant'] })
+                  }
+                >
+                  {Object.entries(VARIANT_LABELS).map(([v, label]) => (
+                    <option key={v} value={v}>{label}</option>
+                  ))}
+                </select>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {msg && <p className={`adm__notice adm__notice--${msg.kind}`}>{msg.text}</p>}
+
+      <div className="adm__actions">
+        <button className="adm__btn adm__btn--primary" disabled={busy} onClick={save}>
+          {busy ? 'Saving…' : 'Save tags'}
+        </button>
+      </div>
+    </section>
   );
 }
 

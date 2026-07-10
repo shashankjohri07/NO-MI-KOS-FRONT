@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { fetchProductTags, type ProductTagMap } from '../services/adminApi';
 import '../styles/Products.css';
 
 interface Tool {
+  key: string;
   to: string;
   tag: string;
   tagVariant: 'live' | 'soon' | 'later';
@@ -11,8 +14,11 @@ interface Tool {
   features: string[];
 }
 
+// `tag`/`tagVariant` here are only FALLBACKS — the live values come from the
+// backend product config (editable in the admin dashboard, no deploy needed).
 const TOOLS: Tool[] = [
   {
+    key: 'page-numbering',
     to: '/tools/page-numbering',
     tag: 'Live',
     tagVariant: 'live',
@@ -22,6 +28,7 @@ const TOOLS: Tool[] = [
     features: ['Merge multiple volumes', 'Skip index pages', 'Continuous numbering'],
   },
   {
+    key: 'annexures',
     to: '/tools/annexures',
     tag: 'Live',
     tagVariant: 'live',
@@ -32,6 +39,7 @@ const TOOLS: Tool[] = [
     features: ['Up to 20 annexures', 'First-page stamping', 'Order control'],
   },
   {
+    key: 'signatures',
     to: '/tools/signatures',
     tag: 'Live',
     tagVariant: 'live',
@@ -41,6 +49,7 @@ const TOOLS: Tool[] = [
     features: ['PNG / JPG inputs', 'Smart placement', 'Client + advocate'],
   },
   {
+    key: 'bookmarks',
     to: '/tools/bookmarks',
     tag: 'New',
     tagVariant: 'live',
@@ -51,6 +60,7 @@ const TOOLS: Tool[] = [
     features: ['Smart heading detection', 'Review & edit before apply', 'Nested hierarchy'],
   },
   {
+    key: 'index-generator',
     to: '/tools/index-generator',
     tag: 'New',
     tagVariant: 'live',
@@ -61,6 +71,7 @@ const TOOLS: Tool[] = [
     features: ['NCLT / court filing format', 'Auto-fill rows from PDF', 'Attach to document'],
   },
   {
+    key: 'document-prep',
     to: '/prep',
     tag: 'Full Pipeline',
     tagVariant: 'soon',
@@ -73,6 +84,12 @@ const TOOLS: Tool[] = [
 ];
 
 export default function Products() {
+  const [tagOverrides, setTagOverrides] = useState<ProductTagMap>({});
+
+  useEffect(() => {
+    fetchProductTags().then(setTagOverrides);
+  }, []);
+
   return (
     <main>
       <section className="products" id="suite">
@@ -86,23 +103,36 @@ export default function Products() {
         </header>
 
         <div className="products__grid">
-          {TOOLS.map((t) => (
-            <Link className="product-card" key={t.title} to={t.to}>
-              <span className={`product-card__tag product-card__tag--${t.tagVariant}`}>{t.tag}</span>
-              <span className="product-card__icon" role="img" aria-hidden="true">
-                {t.icon}
-              </span>
-              <h3 className="product-card__title">{t.title}</h3>
-              <p className="product-card__desc">{t.description}</p>
-              <ul className="product-card__features">
-                {t.features.map((f) => (
-                  <li key={f}>{f}</li>
-                ))}
-              </ul>
-            </Link>
-          ))}
+          {TOOLS.map((t) => {
+            const o = tagOverrides[t.key];
+            const tag = o?.tag ?? t.tag;
+            const tagVariant = o?.tagVariant ?? t.tagVariant;
+            return (
+              <Link className="product-card" key={t.key} to={t.to}>
+                <span className={`product-card__tag product-card__tag--${tagVariant}`}>{tag}</span>
+                <span className="product-card__icon" role="img" aria-hidden="true">
+                  {t.icon}
+                </span>
+                <h3 className="product-card__title">{t.title}</h3>
+                <p className="product-card__desc">{t.description}</p>
+                <ul className="product-card__features">
+                  {t.features.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              </Link>
+            );
+          })}
         </div>
       </section>
     </main>
   );
 }
+
+/** Product list shared with the admin tag editor — key + title + defaults. */
+export const PRODUCT_DEFS = TOOLS.map(({ key, title, tag, tagVariant }) => ({
+  key,
+  title,
+  tag,
+  tagVariant,
+}));

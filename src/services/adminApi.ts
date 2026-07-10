@@ -73,6 +73,13 @@ export interface FeedbackEntry {
   created_at: string;
 }
 
+/** Card tag override per product key, editable from the admin dashboard. */
+export interface ProductTag {
+  tag: string;
+  tagVariant: 'live' | 'soon' | 'later';
+}
+export type ProductTagMap = Record<string, ProductTag>;
+
 export const adminApi = {
   async whoami(): Promise<Whoami> {
     try {
@@ -144,7 +151,35 @@ export const adminApi = {
     if (!r.data.ok) throw new Error(r.data.error || 'Failed to send test email');
     return { sent: r.data.sent, dryRun: r.data.dryRun };
   },
+
+  // Public read — the products page calls this too (via fetchProductTags
+  // below); the admin dashboard uses it to prefill the editor.
+  async getProductTags(): Promise<ProductTagMap> {
+    try {
+      const r = await client.get<{ ok: boolean; tags: ProductTagMap }>('/products/config');
+      return r.data.tags ?? {};
+    } catch { return {}; }
+  },
+
+  async saveProductTags(tags: ProductTagMap): Promise<void> {
+    const r = await client.put<{ ok: boolean; error?: string }>('/admin/products/config', { tags });
+    if (!r.data.ok) throw new Error(r.data.error || 'Failed to save product tags');
+  },
 };
+
+/** Public, unauthenticated read of the product tag config for the landing /
+ * products page. Silent {} on failure — cards fall back to their built-in
+ * defaults. */
+export async function fetchProductTags(): Promise<ProductTagMap> {
+  try {
+    const r = await fetch(`${API_BASE_URL.replace(/\/+$/, '')}/products/config`);
+    if (!r.ok) return {};
+    const data = await r.json();
+    return data?.tags ?? {};
+  } catch {
+    return {};
+  }
+}
 
 /** Fire-and-forget: register the signed-in user's email for event updates.
  * Called after successful login/signup; failures are silent by design — the
