@@ -41,6 +41,16 @@ const TOOLS: Tool[] = [
     features: ['PNG / JPG inputs', 'Smart placement', 'Client + advocate'],
   },
   {
+    to: '/tools/bookmarks',
+    tag: 'New',
+    tagVariant: 'live',
+    icon: '🔖',
+    title: 'Bookmarks',
+    description:
+      'Auto-detect chapters, sections and annexures — review the outline, then download a PDF with clickable bookmarks.',
+    features: ['Smart heading detection', 'Review & edit before apply', 'Nested hierarchy'],
+  },
+  {
     to: '/prep',
     tag: 'Full Pipeline',
     tagVariant: 'soon',

@@ -10,6 +10,7 @@ import AuthConfirm from '../pages/AuthConfirm.tsx';
 import PageNumberingTool from '../pages/Tools/PageNumbering';
 import AnnexuresTool from '../pages/Tools/Annexures';
 import SignaturesTool from '../pages/Tools/Signatures';
+import BookmarksTool from '../pages/Tools/Bookmarks';
 import Admin from '../pages/Admin';
 import RequireAuth from '../components/RequireAuth';
 
@@ -68,6 +69,14 @@ const AppRoutes = () => {
         element={
           <RequireAuth>
             <SignaturesTool />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/tools/bookmarks"
+        element={
+          <RequireAuth>
+            <BookmarksTool />
           </RequireAuth>
         }
       />

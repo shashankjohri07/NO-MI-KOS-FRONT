@@ -83,6 +83,22 @@ export interface ErrorReport {
   paginated_pdf?: string;
 }
 
+export interface BookmarkHeading {
+  title: string;
+  level: number;
+  page: number;
+  y?: number;
+  confidence: number;
+  source: 'auto_detected' | 'existing_toc' | 'user_created';
+}
+
+export interface BookmarkDetection {
+  ok: boolean;
+  existing_toc: boolean;
+  headings: BookmarkHeading[];
+  error?: string;
+}
+
 export const documentApi = {
   async uploadDocument(file: File): Promise<UploadedFile> {
     const formData = new FormData();
@@ -225,6 +241,70 @@ export const documentApi = {
     const cd = resp.headers.get('Content-Disposition') || '';
     const m = cd.match(/filename="([^"]+)"/);
     return { blob, filename: m ? m[1] : fallbackName };
+  },
+
+  // Bookmark detection — uploads the PDF(s) and returns the proposed
+  // heading tree as JSON. Stateless: nothing persists server-side; the
+  // review happens in the browser and the finalized tree goes back through
+  // applyBookmarks() together with the same files.
+  async detectBookmarks(files: File | File[]): Promise<BookmarkDetection> {
+    const fileList = Array.isArray(files) ? files : [files];
+    const fd = new FormData();
+    for (const f of fileList) fd.append('document', f);
+
+    const GATEWAY = new Set([502, 503, 504]);
+    let resp = await fetch(apiUrl('bookmarks/detect'), { method: 'POST', body: fd });
+    if (GATEWAY.has(resp.status)) {
+      await waitForBackendAwake();
+      const fdRetry = new FormData();
+      for (const f of fileList) fdRetry.append('document', f);
+      resp = await fetch(apiUrl('bookmarks/detect'), { method: 'POST', body: fdRetry });
+    }
+    if (!resp.ok) {
+      let msg = `HTTP ${resp.status}`;
+      try {
+        msg = (await resp.json()).error || msg;
+      } catch {
+        // non-JSON error body — keep the status text
+      }
+      throw new Error(msg);
+    }
+    return resp.json();
+  },
+
+  // Inject the user-finalized bookmark tree and stream back the PDF.
+  async applyBookmarks(
+    files: File | File[],
+    headings: BookmarkHeading[]
+  ): Promise<{ blob: Blob; filename: string }> {
+    const fileList = Array.isArray(files) ? files : [files];
+    const build = () => {
+      const fd = new FormData();
+      for (const f of fileList) fd.append('document', f);
+      fd.append('headings', JSON.stringify(headings));
+      return fd;
+    };
+
+    const GATEWAY = new Set([502, 503, 504]);
+    let resp = await fetch(apiUrl('bookmarks/apply'), { method: 'POST', body: build() });
+    if (GATEWAY.has(resp.status)) {
+      await waitForBackendAwake();
+      resp = await fetch(apiUrl('bookmarks/apply'), { method: 'POST', body: build() });
+    }
+    if (!resp.ok) {
+      const text = await resp.text();
+      try {
+        throw new Error(JSON.parse(text).error || `HTTP ${resp.status}`);
+      } catch (e) {
+        if (e instanceof Error && e.message !== text) throw e;
+        throw new Error(text || `HTTP ${resp.status}`);
+      }
+    }
+    const blob = await resp.blob();
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="([^"]+)"/);
+    const fallback = `BOOKMARKED_${(fileList[0]?.name || 'document').replace(/\.pdf$/i, '')}.pdf`;
+    return { blob, filename: m ? m[1] : fallback };
   },
 
   // Lightweight ping. Use it to wake a sleeping Render free-tier dyno
