@@ -11,6 +11,8 @@ import {
   type FeedbackEntry,
   type ProductTagMap,
   type ProductTag,
+  type EmailSettings,
+  type EmailEffective,
 } from '../../services/adminApi';
 import { PRODUCT_DEFS } from '../Products';
 import { BarChart, LineChart } from './Charts';
@@ -100,15 +102,17 @@ export default function Admin() {
 
         <ToolStats stats={toolStats} />
 
-        <FeedbackList entries={feedback} />
+        <FeedbackList entries={feedback} onChange={refresh} />
 
         <ProductTags />
+
+        <EmailSettingsCard />
 
         <ManageAdmins admins={admins} self={who.email} onChange={refresh} />
 
         <NewEvent subscriberCount={stats?.totalUsers ?? 0} onCreated={refresh} selfEmail={who.email} />
 
-        <PastEvents events={events} />
+        <PastEvents events={events} onChange={refresh} />
       </div>
     </div>
   );
@@ -250,6 +254,127 @@ function ProductTags() {
         <button className="adm__btn adm__btn--primary" disabled={busy} onClick={save}>
           {busy ? 'Saving…' : 'Save tags'}
         </button>
+      </div>
+    </section>
+  );
+}
+
+/* ── Email settings ───────────────────────────────────────────────────────── */
+
+const MODE_LABELS: Record<EmailEffective['mode'], string> = {
+  gmail: '✓ Gmail SMTP — emails will send',
+  resend: '✓ Resend — emails will send',
+  'dry-run': '⚠ No provider configured — emails are NOT being sent (dry run)',
+};
+
+function EmailSettingsCard() {
+  const [cfg, setCfg] = useState<EmailSettings | null>(null);
+  const [effective, setEffective] = useState<EmailEffective | null>(null);
+  const [gmailUser, setGmailUser] = useState('');
+  const [fromName, setFromName] = useState('');
+  const [password, setPassword] = useState(''); // blank = keep saved / env
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  useEffect(() => {
+    adminApi.getEmailSettings().then(({ config, effective }) => {
+      setCfg(config);
+      setEffective(effective);
+      setGmailUser(config.gmailUser);
+      setFromName(config.fromName);
+    }).catch(() => setMsg({ kind: 'err', text: 'Could not load email settings.' }));
+  }, []);
+
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await adminApi.saveEmailSettings({
+        gmailUser: gmailUser.trim(),
+        fromName: fromName.trim(),
+        // only send the password when the admin typed one — otherwise keep
+        ...(password.trim() ? { gmailAppPassword: password.trim() } : {}),
+      });
+      setCfg(r.config);
+      setEffective(r.effective);
+      setPassword('');
+      setMsg({ kind: 'ok', text: 'Saved — new emails go out from this account immediately. Use "Send test to me" in New event to verify.' });
+    } catch (e) {
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Failed to save.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearPassword = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await adminApi.saveEmailSettings({
+        gmailUser: gmailUser.trim(),
+        fromName: fromName.trim(),
+        gmailAppPassword: '',
+      });
+      setCfg(r.config);
+      setEffective(r.effective);
+      setPassword('');
+      setMsg({ kind: 'ok', text: 'Saved password cleared — falling back to the server environment variable (if set).' });
+    } catch (e) {
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Failed.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="adm__card">
+      <h2 className="adm__card-title">Email sending</h2>
+      <p className="adm__hint">
+        The Gmail account event emails are sent from. Change it here anytime — no code deploy
+        needed. The password is a Google <strong>App Password</strong> (Google Account → Security →
+        2-Step Verification → App passwords), not the normal Gmail password. Leave a field blank to
+        keep using the server's environment variable.
+      </p>
+
+      {effective && (
+        <p className={`adm__notice adm__notice--${effective.mode === 'dry-run' ? 'err' : 'ok'}`}>
+          {MODE_LABELS[effective.mode]}
+          {effective.mode !== 'dry-run' && <> — sending as <strong>{effective.from}</strong></>}
+        </p>
+      )}
+
+      <div className="adm__row">
+        <div className="adm__col">
+          <label className="adm__label" htmlFor="adm-em-user">Sender Gmail address</label>
+          <input id="adm-em-user" type="email" className="adm__input" value={gmailUser}
+                 placeholder="events@gmail.com" onChange={(e) => setGmailUser(e.target.value)} />
+        </div>
+        <div className="adm__col">
+          <label className="adm__label" htmlFor="adm-em-name">Sender display name</label>
+          <input id="adm-em-name" className="adm__input" value={fromName} maxLength={100}
+                 placeholder="Nomikos" onChange={(e) => setFromName(e.target.value)} />
+        </div>
+      </div>
+
+      <label className="adm__label" htmlFor="adm-em-pass">
+        Gmail app password {cfg?.hasPassword && <span title="A password is saved">(saved ✓ — type to replace)</span>}
+      </label>
+      <input id="adm-em-pass" type="password" className="adm__input" value={password}
+             autoComplete="new-password"
+             placeholder={cfg?.hasPassword ? '•••• •••• •••• ••••  (unchanged)' : '16-character app password'}
+             onChange={(e) => setPassword(e.target.value)} />
+
+      {msg && <p className={`adm__notice adm__notice--${msg.kind}`}>{msg.text}</p>}
+
+      <div className="adm__actions">
+        <button className="adm__btn adm__btn--primary" disabled={busy} onClick={save}>
+          {busy ? 'Saving…' : 'Save email settings'}
+        </button>
+        {cfg?.hasPassword && (
+          <button className="adm__btn adm__btn--ghost" disabled={busy} onClick={clearPassword}>
+            Clear saved password
+          </button>
+        )}
       </div>
     </section>
   );
@@ -528,16 +653,56 @@ function NewEvent({ subscriberCount, onCreated, selfEmail }: { subscriberCount: 
 
 /* ── Past events ──────────────────────────────────────────────────────────── */
 
-function PastEvents({ events }: { events: AdminEvent[] }) {
+function PastEvents({ events, onChange }: { events: AdminEvent[]; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const del = async (ev: AdminEvent) => {
+    if (!window.confirm(`Delete event "${ev.title}"? This only removes the record — emails already sent are unaffected.`)) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await adminApi.deleteEvent(ev.id);
+      setMsg({ kind: 'ok', text: `"${ev.title}" deleted.` });
+      onChange();
+    } catch (e) {
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Failed to delete.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearAll = async () => {
+    if (!window.confirm(`Delete ALL ${events.length} events? This cannot be undone.`)) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await adminApi.clearEvents();
+      setMsg({ kind: 'ok', text: 'All events cleared.' });
+      onChange();
+    } catch (e) {
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Failed to clear.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section className="adm__card">
-      <h2 className="adm__card-title">Past events</h2>
+      <div className="adm__card-header">
+        <h2 className="adm__card-title" style={{ margin: 0 }}>Past events</h2>
+        {events.length > 0 && (
+          <button className="adm__btn adm__btn--outline adm__btn--sm" disabled={busy} onClick={clearAll}>
+            Clear all events
+          </button>
+        )}
+      </div>
       {events.length === 0 ? (
         <p className="adm__empty">No events yet.</p>
       ) : (
         <table className="adm__table">
           <thead>
-            <tr><th>Title</th><th>Event date</th><th>Emailed</th><th>Created</th></tr>
+            <tr><th>Title</th><th>Event date</th><th>Emailed</th><th>Created</th><th /></tr>
           </thead>
           <tbody>
             {events.map((ev) => (
@@ -546,11 +711,17 @@ function PastEvents({ events }: { events: AdminEvent[] }) {
                 <td>{ev.event_date || '—'}</td>
                 <td>{ev.sent_at ? `✓ ${ev.sent_count} sent` : 'not sent'}</td>
                 <td>{new Date(ev.created_at).toLocaleDateString()}</td>
+                <td>
+                  <button className="adm__admin-remove" disabled={busy} onClick={() => del(ev)}>
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+      {msg && <p className={`adm__notice adm__notice--${msg.kind}`}>{msg.text}</p>}
     </section>
   );
 }
@@ -562,6 +733,8 @@ const TOOL_LABELS: Record<string, string> = {
   'page-numbering': 'Page Numbering',
   'annexures': 'Annexures',
   'signatures': 'Signatures',
+  'bookmarks': 'Bookmarks',
+  'index-generator': 'Index Generator',
 };
 
 function ToolStats({ stats }: { stats: ToolStat[] }) {
@@ -590,10 +763,32 @@ function ToolStats({ stats }: { stats: ToolStat[] }) {
 
 /* ── User feedback ────────────────────────────────────────────────────────── */
 
-function FeedbackList({ entries }: { entries: FeedbackEntry[] }) {
+function FeedbackList({ entries, onChange }: { entries: FeedbackEntry[]; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+
+  const clearAll = async () => {
+    if (!window.confirm(`Delete ALL ${entries.length} feedback entries? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      await adminApi.clearFeedback();
+      onChange();
+    } catch {
+      /* refresh shows current state either way */
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section className="adm__card">
-      <h2 className="adm__card-title">User feedback</h2>
+      <div className="adm__card-header">
+        <h2 className="adm__card-title" style={{ margin: 0 }}>User feedback</h2>
+        {entries.length > 0 && (
+          <button className="adm__btn adm__btn--outline adm__btn--sm" disabled={busy} onClick={clearAll}>
+            Clear all feedback
+          </button>
+        )}
+      </div>
       {entries.length === 0 ? (
         <p className="adm__empty">No feedback yet.</p>
       ) : (

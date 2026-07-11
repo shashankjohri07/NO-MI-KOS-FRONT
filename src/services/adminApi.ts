@@ -80,6 +80,19 @@ export interface ProductTag {
 }
 export type ProductTagMap = Record<string, ProductTag>;
 
+/** Email sender settings as the admin dashboard sees them — the app
+ * password itself is never sent back, only whether one is saved. */
+export interface EmailSettings {
+  gmailUser: string;
+  fromName: string;
+  hasPassword: boolean;
+}
+export interface EmailEffective {
+  from: string;
+  user: string;
+  mode: 'gmail' | 'resend' | 'dry-run';
+}
+
 export const adminApi = {
   async whoami(): Promise<Whoami> {
     try {
@@ -164,6 +177,41 @@ export const adminApi = {
   async saveProductTags(tags: ProductTagMap): Promise<void> {
     const r = await client.put<{ ok: boolean; error?: string }>('/admin/products/config', { tags });
     if (!r.data.ok) throw new Error(r.data.error || 'Failed to save product tags');
+  },
+
+  async deleteEvent(id: string): Promise<void> {
+    const r = await client.delete<{ ok: boolean; error?: string }>(`/admin/events/${encodeURIComponent(id)}`);
+    if (!r.data.ok) throw new Error(r.data.error || 'Failed to delete event');
+  },
+
+  async clearEvents(): Promise<void> {
+    const r = await client.delete<{ ok: boolean; error?: string }>('/admin/events');
+    if (!r.data.ok) throw new Error(r.data.error || 'Failed to clear events');
+  },
+
+  async clearFeedback(): Promise<void> {
+    const r = await client.delete<{ ok: boolean; error?: string }>('/admin/feedback');
+    if (!r.data.ok) throw new Error(r.data.error || 'Failed to clear feedback');
+  },
+
+  async getEmailSettings(): Promise<{ config: EmailSettings; effective: EmailEffective }> {
+    const r = await client.get<{ ok: boolean; config: EmailSettings; effective: EmailEffective }>(
+      '/admin/email/config',
+    );
+    return { config: r.data.config, effective: r.data.effective };
+  },
+
+  /** Pass gmailAppPassword: undefined to keep the saved one, '' to clear it. */
+  async saveEmailSettings(input: {
+    gmailUser: string;
+    fromName: string;
+    gmailAppPassword?: string;
+  }): Promise<{ config: EmailSettings; effective: EmailEffective }> {
+    const r = await client.put<{
+      ok: boolean; config: EmailSettings; effective: EmailEffective; error?: string;
+    }>('/admin/email/config', input);
+    if (!r.data.ok) throw new Error(r.data.error || 'Failed to save email settings');
+    return { config: r.data.config, effective: r.data.effective };
   },
 };
 
