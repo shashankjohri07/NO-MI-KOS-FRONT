@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
+import { gateTool } from '../../services/billingApi';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import { useFileList } from '../ErrorReport/useFileList';
@@ -60,6 +61,12 @@ export default function SignaturesTool() {
     setErrorMsg('');
     setPhase('processing');
     try {
+      const block = await gateTool('signatures');
+      if (block) {
+        setErrorMsg(block);
+        setPhase('error');
+        return;
+      }
       const { blob, filename } = await documentApi.writePagination(
         doc.files,
         0,

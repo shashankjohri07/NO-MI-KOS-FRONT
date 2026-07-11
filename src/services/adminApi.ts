@@ -93,6 +93,34 @@ export interface EmailEffective {
   mode: 'gmail' | 'resend' | 'dry-run';
 }
 
+/** One subscription plan, admin-editable. docsPerPeriod -1 = unlimited. */
+export interface BillingPlan {
+  id: string;
+  name: string;
+  description: string;
+  priceInr: number;
+  periodDays: number;
+  docsPerPeriod: number;
+  tools: string[];
+}
+
+export interface BillingConfigView {
+  enabled: boolean;
+  keyId: string;
+  hasKeySecret: boolean;
+  plans: BillingPlan[];
+}
+
+export interface SubscriptionRow {
+  id: string;
+  email: string;
+  plan_id: string;
+  status: string;
+  started_at: string;
+  expires_at: string;
+  created_at: string;
+}
+
 export const adminApi = {
   async whoami(): Promise<Whoami> {
     try {
@@ -212,6 +240,37 @@ export const adminApi = {
     }>('/admin/email/config', input);
     if (!r.data.ok) throw new Error(r.data.error || 'Failed to save email settings');
     return { config: r.data.config, effective: r.data.effective };
+  },
+
+  async getBillingConfig(): Promise<{ config: BillingConfigView; allTools: string[] }> {
+    const r = await client.get<{ ok: boolean; config: BillingConfigView; allTools: string[] }>(
+      '/admin/billing/config',
+    );
+    return { config: r.data.config, allTools: r.data.allTools };
+  },
+
+  /** keySecret: undefined = keep saved, '' = clear, string = replace. */
+  async saveBillingConfig(input: {
+    enabled: boolean;
+    keyId: string;
+    keySecret?: string;
+    plans: BillingPlan[];
+  }): Promise<BillingConfigView> {
+    const r = await client.put<{ ok: boolean; config: BillingConfigView; error?: string }>(
+      '/admin/billing/config',
+      input,
+    );
+    if (!r.data.ok) throw new Error(r.data.error || 'Failed to save billing config');
+    return r.data.config;
+  },
+
+  async listSubscriptions(): Promise<SubscriptionRow[]> {
+    try {
+      const r = await client.get<{ ok: boolean; subscriptions: SubscriptionRow[] }>(
+        '/admin/billing/subscriptions',
+      );
+      return r.data.subscriptions ?? [];
+    } catch { return []; }
   },
 };
 
