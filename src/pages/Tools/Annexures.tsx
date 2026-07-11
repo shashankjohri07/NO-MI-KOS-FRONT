@@ -121,6 +121,11 @@ export default function AnnexuresTool() {
             filename={result.filename}
             message={`✓ PDF ready with ${annex.files.length} annexure${annex.files.length === 1 ? '' : 's'}.`}
             onReset={reset}
+            summary={[
+              `${main.files.length} main volume${main.files.length === 1 ? '' : 's'}`,
+              `${annex.files.length} annexure${annex.files.length === 1 ? '' : 's'} stamped A-1…A-${annex.files.length}`,
+              'continuous pagination',
+            ]}
             producedBy="Annexures"
             nextSteps={[
               { label: 'Stamp Signatures', to: '/tools/signatures' },

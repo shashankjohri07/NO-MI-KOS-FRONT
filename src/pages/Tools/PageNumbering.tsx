@@ -90,6 +90,12 @@ export default function PageNumberingTool() {
             message="✓ Numbered PDF ready."
             onReset={reset}
             resetLabel="Number Another"
+            summary={[
+              `${main.files.length} volume${main.files.length === 1 ? '' : 's'} merged`,
+              safeIndexEnd() > 0
+                ? `pages 1–${safeIndexEnd()} (index) left unnumbered`
+                : 'numbered from page 1',
+            ]}
             producedBy="Page Numbering"
             nextSteps={[
               { label: 'Add Annexures', to: '/tools/annexures' },

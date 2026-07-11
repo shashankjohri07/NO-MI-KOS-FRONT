@@ -266,6 +266,10 @@ export default function BookmarksTool() {
             filename={result.filename}
             message="✓ PDF ready with bookmarks."
             onReset={reset}
+            summary={[
+              `${includedCount} bookmark${includedCount === 1 ? '' : 's'} written`,
+              'clickable outline in the PDF sidebar',
+            ]}
             producedBy="Bookmarks"
             nextSteps={[
               { label: 'Stamp Signatures', to: '/tools/signatures' },

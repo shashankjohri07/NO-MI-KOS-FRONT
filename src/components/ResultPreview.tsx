@@ -26,6 +26,9 @@ interface Props {
   /** Offer to carry this output straight into other tools — the file is
    * handed over in browser memory only, never re-uploaded or stored. */
   nextSteps?: NextStep[];
+  /** What was actually done — short facts shown under the headline,
+   * e.g. ["3 volumes merged", "4 annexures stamped"]. */
+  summary?: string[];
 }
 
 export default function ResultPreview({
@@ -36,6 +39,7 @@ export default function ResultPreview({
   resetLabel = 'Start Another',
   producedBy,
   nextSteps,
+  summary,
 }: Props) {
   const navigate = useNavigate();
   const url = useMemo(() => URL.createObjectURL(blob), [blob]);
@@ -57,6 +61,18 @@ export default function ResultPreview({
     <section className="er__upload-section">
       <div className="rp">
         <p className="rp__title">{message}</p>
+        {summary && summary.length > 0 && (
+          <ul className="rp__summary">
+            {[
+              ...summary,
+              blob.size >= 1024 * 1024
+                ? `${(blob.size / 1024 / 1024).toFixed(2)} MB output`
+                : `${Math.max(1, Math.round(blob.size / 1024))} KB output`,
+            ].map((s) => (
+              <li key={s}>{s}</li>
+            ))}
+          </ul>
+        )}
         <p className="rp__hint">
           Check the preview below — the file downloads only when you're happy with it.
         </p>

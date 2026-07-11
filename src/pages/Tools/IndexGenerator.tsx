@@ -408,6 +408,12 @@ export default function IndexGeneratorTool() {
               setPhase('edit');
             }}
             resetLabel="Back to Editor"
+            summary={[
+              `${validRows.length} index row${validRows.length === 1 ? '' : 's'}`,
+              prepend && doc.files.length > 0
+                ? 'index attached to the front of the document'
+                : 'standalone index page',
+            ]}
             producedBy="Index Generator"
             nextSteps={[
               { label: 'Add Bookmarks', to: '/tools/bookmarks' },
