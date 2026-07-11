@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
+import { friendlyError } from '../../services/friendlyError';
 import MainFileStep from '../ErrorReport/MainFileStep';
 import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
@@ -45,7 +46,7 @@ export default function PageNumberingTool() {
       trackTool('page-numbering');
       setPhase('done');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
+      setErrorMsg(friendlyError(err, 'Could not number this document.'));
       setPhase('error');
     }
   };
