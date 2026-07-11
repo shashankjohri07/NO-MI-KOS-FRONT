@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { documentApi, trackTool, type BookmarkHeading } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
+import { gateTool } from '../../services/billingApi';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
@@ -74,6 +75,12 @@ export default function BookmarksTool() {
     setErrorMsg('');
     setPhase('applying');
     try {
+      const block = await gateTool('bookmarks');
+      if (block) {
+        setErrorMsg(block);
+        setPhase('error');
+        return;
+      }
       const { blob, filename } = await documentApi.applyBookmarks(
         doc.files,
         finalRows.map(({ title, level, page, confidence, source }) => ({

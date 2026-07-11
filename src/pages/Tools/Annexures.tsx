@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
+import { gateTool } from '../../services/billingApi';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
@@ -35,6 +36,12 @@ export default function AnnexuresTool() {
     setErrorMsg('');
     setPhase('processing');
     try {
+      const block = await gateTool('annexures');
+      if (block) {
+        setErrorMsg(block);
+        setPhase('error');
+        return;
+      }
       const { blob, filename } = await documentApi.writePagination(main.files, 0, annex.files);
       setResult({ blob, filename });
       trackTool('annexures');

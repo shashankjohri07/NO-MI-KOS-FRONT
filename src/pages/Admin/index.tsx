@@ -13,6 +13,9 @@ import {
   type ProductTag,
   type EmailSettings,
   type EmailEffective,
+  type BillingConfigView,
+  type BillingPlan,
+  type SubscriptionRow,
 } from '../../services/adminApi';
 import { PRODUCT_DEFS } from '../Products';
 import { BarChart, LineChart } from './Charts';
@@ -107,6 +110,8 @@ export default function Admin() {
         <ProductTags />
 
         <EmailSettingsCard />
+
+        <BillingCard />
 
         <ManageAdmins admins={admins} self={who.email} onChange={refresh} />
 
@@ -376,6 +381,203 @@ function EmailSettingsCard() {
           </button>
         )}
       </div>
+    </section>
+  );
+}
+
+/* ── Billing / subscriptions ─────────────────────────────────────────────── */
+
+function BillingCard() {
+  const [cfg, setCfg] = useState<BillingConfigView | null>(null);
+  const [allTools, setAllTools] = useState<string[]>([]);
+  const [subs, setSubs] = useState<SubscriptionRow[]>([]);
+  const [keySecret, setKeySecret] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  useEffect(() => {
+    adminApi.getBillingConfig().then(({ config, allTools }) => {
+      setCfg(config);
+      setAllTools(allTools);
+    }).catch(() => setMsg({ kind: 'err', text: 'Could not load billing config.' }));
+    adminApi.listSubscriptions().then(setSubs);
+  }, []);
+
+  if (!cfg) {
+    return (
+      <section className="adm__card">
+        <h2 className="adm__card-title">Subscriptions &amp; billing</h2>
+        <p className="adm__empty">{msg?.text ?? 'Loading…'}</p>
+      </section>
+    );
+  }
+
+  const patchPlan = (i: number, p: Partial<BillingPlan>) =>
+    setCfg({ ...cfg, plans: cfg.plans.map((pl, j) => (j === i ? { ...pl, ...p } : pl)) });
+
+  const toggleTool = (i: number, tool: string) => {
+    const plan = cfg.plans[i];
+    const tools = plan.tools.includes(tool)
+      ? plan.tools.filter((t) => t !== tool)
+      : [...plan.tools, tool];
+    patchPlan(i, { tools });
+  };
+
+  const addPlan = () =>
+    setCfg({
+      ...cfg,
+      plans: [
+        ...cfg.plans,
+        {
+          id: `plan${cfg.plans.length + 1}`, name: '', description: '',
+          priceInr: 0, periodDays: 30, docsPerPeriod: 10, tools: [...allTools],
+        },
+      ],
+    });
+
+  const removePlan = (i: number) =>
+    setCfg({ ...cfg, plans: cfg.plans.filter((_, j) => j !== i) });
+
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const saved = await adminApi.saveBillingConfig({
+        enabled: cfg.enabled,
+        keyId: cfg.keyId,
+        ...(keySecret.trim() ? { keySecret: keySecret.trim() } : {}),
+        plans: cfg.plans,
+      });
+      setCfg(saved);
+      setKeySecret('');
+      setMsg({
+        kind: 'ok',
+        text: saved.enabled
+          ? 'Saved — billing is LIVE. Users now see plans and quotas.'
+          : 'Saved — billing is OFF. Every tool stays free and unlimited.',
+      });
+    } catch (e) {
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Failed to save.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const now = new Date().toISOString();
+  const activeSubs = subs.filter((s) => s.status === 'active' && s.expires_at > now);
+
+  return (
+    <section className="adm__card">
+      <h2 className="adm__card-title">Subscriptions &amp; billing</h2>
+      <p className="adm__hint">
+        Define the plans, their price, how many documents they allow per period, and which tools
+        they include — like a streaming subscription, access stops by itself when a plan expires.
+        The master switch turns the whole system on or off; while OFF, everything stays free.
+      </p>
+
+      <label className="adm__toggle">
+        <input
+          type="checkbox"
+          checked={cfg.enabled}
+          onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })}
+        />
+        <strong>{cfg.enabled ? 'Billing is ON' : 'Billing is OFF'}</strong> — {cfg.enabled
+          ? 'users are limited by their plan'
+          : 'all tools free and unlimited for everyone'}
+      </label>
+
+      <div className="adm__row">
+        <div className="adm__col">
+          <label className="adm__label" htmlFor="adm-rzp-id">Razorpay Key ID</label>
+          <input id="adm-rzp-id" className="adm__input" value={cfg.keyId}
+                 placeholder="rzp_test_…" onChange={(e) => setCfg({ ...cfg, keyId: e.target.value })} />
+        </div>
+        <div className="adm__col">
+          <label className="adm__label" htmlFor="adm-rzp-secret">
+            Razorpay Key Secret {cfg.hasKeySecret && <span>(saved ✓ — type to replace)</span>}
+          </label>
+          <input id="adm-rzp-secret" type="password" className="adm__input" value={keySecret}
+                 autoComplete="new-password"
+                 placeholder={cfg.hasKeySecret ? '••••••••  (unchanged)' : 'from the Razorpay dashboard'}
+                 onChange={(e) => setKeySecret(e.target.value)} />
+        </div>
+      </div>
+
+      {cfg.plans.map((p, i) => (
+        <div key={i} className="adm__plan">
+          <div className="adm__plan-head">
+            <input className="adm__input adm__plan-name" value={p.name} maxLength={40}
+                   placeholder="Plan name" onChange={(e) => patchPlan(i, { name: e.target.value })} />
+            <input className="adm__input adm__plan-id" value={p.id} maxLength={30}
+                   placeholder="id (e.g. pro)" onChange={(e) => patchPlan(i, { id: e.target.value })} />
+            <button className="adm__admin-remove" disabled={busy || cfg.plans.length <= 1}
+                    onClick={() => removePlan(i)}>Remove</button>
+          </div>
+          <input className="adm__input" value={p.description} maxLength={200}
+                 placeholder="One-line description shown on the pricing page"
+                 onChange={(e) => patchPlan(i, { description: e.target.value })} />
+          <div className="adm__row">
+            <div className="adm__col">
+              <label className="adm__label">Price (₹ per period; 0 = free)</label>
+              <input type="number" min={0} className="adm__input" value={p.priceInr}
+                     onChange={(e) => patchPlan(i, { priceInr: Number(e.target.value) })} />
+            </div>
+            <div className="adm__col">
+              <label className="adm__label">Period (days)</label>
+              <input type="number" min={1} className="adm__input" value={p.periodDays}
+                     onChange={(e) => patchPlan(i, { periodDays: Number(e.target.value) })} />
+            </div>
+            <div className="adm__col">
+              <label className="adm__label">Documents / period (-1 = unlimited)</label>
+              <input type="number" min={-1} className="adm__input" value={p.docsPerPeriod}
+                     onChange={(e) => patchPlan(i, { docsPerPeriod: Number(e.target.value) })} />
+            </div>
+          </div>
+          <div className="adm__plan-tools">
+            {allTools.map((t) => (
+              <label key={t} className="adm__plan-tool">
+                <input type="checkbox" checked={p.tools.includes(t)}
+                       onChange={() => toggleTool(i, t)} />
+                {TOOL_LABELS[t] ?? t}
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div className="adm__actions">
+        <button className="adm__btn adm__btn--outline" disabled={busy} onClick={addPlan}>
+          + Add plan
+        </button>
+        <button className="adm__btn adm__btn--primary" disabled={busy} onClick={save}>
+          {busy ? 'Saving…' : 'Save billing settings'}
+        </button>
+      </div>
+      {msg && <p className={`adm__notice adm__notice--${msg.kind}`}>{msg.text}</p>}
+
+      <h3 className="adm__chart-title" style={{ marginTop: '1.5rem' }}>
+        Active subscriptions ({activeSubs.length})
+      </h3>
+      {subs.length === 0 ? (
+        <p className="adm__empty">No paid subscriptions yet.</p>
+      ) : (
+        <table className="adm__table">
+          <thead>
+            <tr><th>User</th><th>Plan</th><th>Status</th><th>Expires</th></tr>
+          </thead>
+          <tbody>
+            {subs.slice(0, 50).map((s) => (
+              <tr key={s.id}>
+                <td>{s.email}</td>
+                <td>{s.plan_id}</td>
+                <td>{s.status === 'active' && s.expires_at > now ? '✓ active'
+                  : s.status === 'cancelled' ? 'cancelled' : 'expired'}</td>
+                <td>{new Date(s.expires_at).toLocaleDateString('en-IN')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </section>
   );
 }

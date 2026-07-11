@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
+import { gateTool } from '../../services/billingApi';
 import MainFileStep from '../ErrorReport/MainFileStep';
 import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
@@ -41,6 +42,12 @@ export default function PageNumberingTool() {
     setErrorMsg('');
     setPhase('processing');
     try {
+      const block = await gateTool('page-numbering');
+      if (block) {
+        setErrorMsg(block);
+        setPhase('error');
+        return;
+      }
       const { blob, filename } = await documentApi.writePagination(main.files, safeIndexEnd());
       setResult({ blob, filename });
       trackTool('page-numbering');

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { documentApi, trackTool, type IndexPayload, type IndexRow } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
+import { gateTool } from '../../services/billingApi';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
@@ -361,6 +362,12 @@ export default function IndexGeneratorTool() {
     setErrorMsg('');
     setPhase('generating');
     try {
+      const block = await gateTool('index-generator');
+      if (block) {
+        setErrorMsg(block);
+        setPhase('error');
+        return;
+      }
       const payload: IndexPayload = {
         court: splitLines(court),
         caseLines: splitLines(caseLines),

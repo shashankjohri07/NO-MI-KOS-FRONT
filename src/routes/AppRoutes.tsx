@@ -13,6 +13,7 @@ import SignaturesTool from '../pages/Tools/Signatures';
 import BookmarksTool from '../pages/Tools/Bookmarks';
 import IndexGeneratorTool from '../pages/Tools/IndexGenerator';
 import Admin from '../pages/Admin';
+import Pricing from '../pages/Pricing';
 import RequireAuth from '../components/RequireAuth';
 
 const AppRoutes = () => {
@@ -25,6 +26,7 @@ const AppRoutes = () => {
       <Route path="/auth/confirm" element={<AuthConfirm />} />
 
       <Route path="/products" element={<Products />} />
+      <Route path="/pricing" element={<Pricing />} />
       <Route
         path="/options"
         element={
