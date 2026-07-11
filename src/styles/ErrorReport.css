@@ -96,6 +96,28 @@
   border-style: solid;
 }
 
+.er__dropzone--drag .er__dropzone-label {
+  border-color: var(--gold);
+  background: var(--gold-pale);
+  border-style: solid;
+}
+
+/* Post-selection feedback under the dropzone */
+.er__dz-notice {
+  font-size: 0.82rem;
+  margin: -0.75rem 0 0;
+  align-self: stretch;
+}
+.er__dz-notice--ok {
+  color: var(--sage, #3a5a4a);
+}
+.er__dz-notice--warn {
+  color: var(--rust, #8b3a2a);
+  background: rgba(139, 58, 42, 0.08);
+  border-left: 3px solid var(--rust, #8b3a2a);
+  padding: 0.55rem 0.85rem;
+}
+
 .er__upload-icon {
   color: var(--gold);
 }
