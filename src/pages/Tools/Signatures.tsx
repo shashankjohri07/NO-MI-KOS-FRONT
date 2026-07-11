@@ -4,6 +4,7 @@ import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import { useFileList } from '../ErrorReport/useFileList';
 import { parsePageSpec, formatPageSet } from '../ErrorReport/pageSpec';
+import ResultPreview from '../../components/ResultPreview';
 import '../../styles/ErrorReport.css';
 
 export default function SignaturesTool() {
@@ -12,6 +13,7 @@ export default function SignaturesTool() {
   const [advocateSig, setAdvocateSig] = useState<File | null>(null);
   const [signPages, setSignPages] = useState('');
   const [phase, setPhase] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
+  const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const elapsedRef = useRef<number | null>(null);
@@ -51,6 +53,7 @@ export default function SignaturesTool() {
     setClientSig(null);
     setAdvocateSig(null);
     setSignPages('');
+    setResult(null);
     setPhase('idle');
     setErrorMsg('');
     if (clientRef.current) clientRef.current.value = '';
@@ -75,12 +78,7 @@ export default function SignaturesTool() {
         signPages.trim() || undefined,
         { client: clientSig, advocate: advocateSig },
       );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      setResult({ blob, filename });
       trackTool('signatures');
       setPhase('done');
     } catch (err: unknown) {
@@ -210,15 +208,13 @@ export default function SignaturesTool() {
           </>
         )}
 
-        {phase === 'done' && (
-          <section className="er__upload-section">
-            <div className="er__annex-prompt">
-              <p className="er__annex-prompt-title">✓ PDF downloaded with signatures.</p>
-              <button type="button" className="er__btn er__btn--primary" onClick={reset}>
-                Start Another
-              </button>
-            </div>
-          </section>
+        {phase === 'done' && result && (
+          <ResultPreview
+            blob={result.blob}
+            filename={result.filename}
+            message="✓ PDF ready with signatures."
+            onReset={reset}
+          />
         )}
 
         {phase === 'error' && (

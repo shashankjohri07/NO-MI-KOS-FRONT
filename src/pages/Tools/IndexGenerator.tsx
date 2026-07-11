@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { documentApi, trackTool, type IndexPayload, type IndexRow } from '../../services/documentApi';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
+import ResultPreview from '../../components/ResultPreview';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
 import '../../styles/IndexGenerator.css';
@@ -34,6 +35,7 @@ const splitLines = (s: string) =>
 export default function IndexGeneratorTool() {
   const doc = useFileList();
   const [phase, setPhase] = useState<'edit' | 'seeding' | 'generating' | 'done' | 'error'>('edit');
+  const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const nextId = useRef(0);
   const id = () => nextId.current++;
@@ -188,12 +190,7 @@ export default function IndexGeneratorTool() {
         payload,
         prepend ? doc.files : []
       );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      setResult({ blob, filename });
       trackTool('index-generator');
       setPhase('done');
     } catch (err: unknown) {
@@ -215,15 +212,17 @@ export default function IndexGeneratorTool() {
           </p>
         </header>
 
-        {phase === 'done' && (
-          <section className="er__upload-section">
-            <div className="er__annex-prompt">
-              <p className="er__annex-prompt-title">✓ Index PDF downloaded.</p>
-              <button type="button" className="er__btn er__btn--primary" onClick={() => setPhase('edit')}>
-                Back to Editor
-              </button>
-            </div>
-          </section>
+        {phase === 'done' && result && (
+          <ResultPreview
+            blob={result.blob}
+            filename={result.filename}
+            message="✓ Index PDF ready."
+            onReset={() => {
+              setResult(null);
+              setPhase('edit');
+            }}
+            resetLabel="Back to Editor"
+          />
         )}
 
         {phase === 'error' && (

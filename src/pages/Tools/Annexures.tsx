@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
+import ResultPreview from '../../components/ResultPreview';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
 
@@ -9,6 +10,7 @@ export default function AnnexuresTool() {
   const main = useFileList();
   const annex = useFileList();
   const [phase, setPhase] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
+  const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const elapsedRef = useRef<number | null>(null);
@@ -32,6 +34,7 @@ export default function AnnexuresTool() {
   const reset = () => {
     main.reset();
     annex.reset();
+    setResult(null);
     setPhase('idle');
     setErrorMsg('');
   };
@@ -42,12 +45,7 @@ export default function AnnexuresTool() {
     setPhase('processing');
     try {
       const { blob, filename } = await documentApi.writePagination(main.files, 0, annex.files);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      setResult({ blob, filename });
       trackTool('annexures');
       setPhase('done');
     } catch (err: unknown) {
@@ -134,17 +132,13 @@ export default function AnnexuresTool() {
           </>
         )}
 
-        {phase === 'done' && (
-          <section className="er__upload-section">
-            <div className="er__annex-prompt">
-              <p className="er__annex-prompt-title">
-                ✓ PDF downloaded with {annex.files.length} annexure{annex.files.length === 1 ? '' : 's'}.
-              </p>
-              <button type="button" className="er__btn er__btn--primary" onClick={reset}>
-                Start Another
-              </button>
-            </div>
-          </section>
+        {phase === 'done' && result && (
+          <ResultPreview
+            blob={result.blob}
+            filename={result.filename}
+            message={`✓ PDF ready with ${annex.files.length} annexure${annex.files.length === 1 ? '' : 's'}.`}
+            onReset={reset}
+          />
         )}
 
         {phase === 'error' && (

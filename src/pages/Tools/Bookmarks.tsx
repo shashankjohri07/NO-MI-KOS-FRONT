@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { documentApi, trackTool, type BookmarkHeading } from '../../services/documentApi';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
+import ResultPreview from '../../components/ResultPreview';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
 import '../../styles/Bookmarks.css';
@@ -20,6 +21,7 @@ export default function BookmarksTool() {
   const doc = useFileList();
   const [phase, setPhase] = useState<'idle' | 'detecting' | 'review' | 'applying' | 'done' | 'error'>('idle');
   const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(null);
   const [existingToc, setExistingToc] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -46,6 +48,7 @@ export default function BookmarksTool() {
   const reset = () => {
     doc.reset();
     setRows([]);
+    setResult(null);
     setExistingToc(false);
     setPhase('idle');
     setErrorMsg('');
@@ -89,12 +92,7 @@ export default function BookmarksTool() {
           source,
         })),
       );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      setResult({ blob, filename });
       trackTool('bookmarks');
       setPhase('done');
     } catch (err: unknown) {
@@ -276,15 +274,13 @@ export default function BookmarksTool() {
           </div>
         )}
 
-        {phase === 'done' && (
-          <section className="er__upload-section">
-            <div className="er__annex-prompt">
-              <p className="er__annex-prompt-title">✓ PDF downloaded with bookmarks.</p>
-              <button type="button" className="er__btn er__btn--primary" onClick={reset}>
-                Start Another
-              </button>
-            </div>
-          </section>
+        {phase === 'done' && result && (
+          <ResultPreview
+            blob={result.blob}
+            filename={result.filename}
+            message="✓ PDF ready with bookmarks."
+            onReset={reset}
+          />
         )}
 
         {phase === 'error' && (
