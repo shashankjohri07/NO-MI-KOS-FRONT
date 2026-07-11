@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { documentApi, trackTool, type BookmarkHeading } from '../../services/documentApi';
+import { friendlyError } from '../../services/friendlyError';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
@@ -62,7 +63,7 @@ export default function BookmarksTool() {
       );
       setPhase('review');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to detect bookmarks');
+      setErrorMsg(friendlyError(err, 'Could not scan this document for headings.'));
       setPhase('error');
     }
   };
@@ -87,7 +88,7 @@ export default function BookmarksTool() {
       trackTool('bookmarks');
       setPhase('done');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to apply bookmarks');
+      setErrorMsg(friendlyError(err, 'Could not write the bookmarks.'));
       setPhase('error');
     }
   };
@@ -265,6 +266,10 @@ export default function BookmarksTool() {
             filename={result.filename}
             message="✓ PDF ready with bookmarks."
             onReset={reset}
+            summary={[
+              `${includedCount} bookmark${includedCount === 1 ? '' : 's'} written`,
+              'clickable outline in the PDF sidebar',
+            ]}
             producedBy="Bookmarks"
             nextSteps={[
               { label: 'Stamp Signatures', to: '/tools/signatures' },

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
+import { friendlyError } from '../../services/friendlyError';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
@@ -39,7 +40,7 @@ export default function AnnexuresTool() {
       trackTool('annexures');
       setPhase('done');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
+      setErrorMsg(friendlyError(err, 'Could not merge the annexures.'));
       setPhase('error');
     }
   };
@@ -120,6 +121,11 @@ export default function AnnexuresTool() {
             filename={result.filename}
             message={`✓ PDF ready with ${annex.files.length} annexure${annex.files.length === 1 ? '' : 's'}.`}
             onReset={reset}
+            summary={[
+              `${main.files.length} main volume${main.files.length === 1 ? '' : 's'}`,
+              `${annex.files.length} annexure${annex.files.length === 1 ? '' : 's'} stamped A-1…A-${annex.files.length}`,
+              'continuous pagination',
+            ]}
             producedBy="Annexures"
             nextSteps={[
               { label: 'Stamp Signatures', to: '/tools/signatures' },

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
+import { friendlyError } from '../../services/friendlyError';
 import MainFileStep from '../ErrorReport/MainFileStep';
 import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
@@ -45,7 +46,7 @@ export default function PageNumberingTool() {
       trackTool('page-numbering');
       setPhase('done');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
+      setErrorMsg(friendlyError(err, 'Could not number this document.'));
       setPhase('error');
     }
   };
@@ -89,6 +90,12 @@ export default function PageNumberingTool() {
             message="✓ Numbered PDF ready."
             onReset={reset}
             resetLabel="Number Another"
+            summary={[
+              `${main.files.length} volume${main.files.length === 1 ? '' : 's'} merged`,
+              safeIndexEnd() > 0
+                ? `pages 1–${safeIndexEnd()} (index) left unnumbered`
+                : 'numbered from page 1',
+            ]}
             producedBy="Page Numbering"
             nextSteps={[
               { label: 'Add Annexures', to: '/tools/annexures' },

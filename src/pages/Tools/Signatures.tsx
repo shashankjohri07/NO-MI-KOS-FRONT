@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
+import { friendlyError } from '../../services/friendlyError';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import { useFileList } from '../ErrorReport/useFileList';
@@ -72,7 +73,7 @@ export default function SignaturesTool() {
       trackTool('signatures');
       setPhase('done');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
+      setErrorMsg(friendlyError(err, 'Could not stamp the signatures.'));
       setPhase('error');
     }
   };
@@ -196,6 +197,11 @@ export default function SignaturesTool() {
             filename={result.filename}
             message="✓ PDF ready with signatures."
             onReset={reset}
+            summary={[
+              [clientSig && 'client', advocateSig && 'advocate'].filter(Boolean).join(' + ') +
+                ' signature stamped',
+              signPages.trim() ? `on pages ${signPages.trim()}` : 'on every page',
+            ]}
             producedBy="Signatures"
             nextSteps={[
               { label: 'Add Bookmarks', to: '/tools/bookmarks' },

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { documentApi, trackTool, type IndexPayload, type IndexRow } from '../../services/documentApi';
+import { friendlyError } from '../../services/friendlyError';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
@@ -337,7 +338,7 @@ export default function IndexGeneratorTool() {
       setRows(seeded);
       setPhase('edit');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to read document');
+      setErrorMsg(friendlyError(err, 'Could not read the document structure.'));
       setPhase('edit');
     }
   };
@@ -379,7 +380,7 @@ export default function IndexGeneratorTool() {
       trackTool('index-generator');
       setPhase('done');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to generate index');
+      setErrorMsg(friendlyError(err, 'Could not generate the index.'));
       setPhase('error');
     }
   };
@@ -407,6 +408,12 @@ export default function IndexGeneratorTool() {
               setPhase('edit');
             }}
             resetLabel="Back to Editor"
+            summary={[
+              `${validRows.length} index row${validRows.length === 1 ? '' : 's'}`,
+              prepend && doc.files.length > 0
+                ? 'index attached to the front of the document'
+                : 'standalone index page',
+            ]}
             producedBy="Index Generator"
             nextSteps={[
               { label: 'Add Bookmarks', to: '/tools/bookmarks' },
