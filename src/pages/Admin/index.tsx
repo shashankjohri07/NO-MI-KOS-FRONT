@@ -18,14 +18,9 @@ import {
   type SubscriptionRow,
 } from '../../services/adminApi';
 import { PRODUCT_DEFS } from '../Products';
-import { BarChart, LineChart } from './Charts';
+import { BarChart, LineChart, DonutChart, MiniSparkline } from './Charts';
 import '../../styles/Admin.css';
 
-/**
- * Admin workspace — dashboard stats, manage admins, and create/email events.
- * Access is decided by the backend's /admin/whoami; non-admins are bounced
- * home. Normal users never reach here and their experience is untouched.
- */
 export default function Admin() {
   const navigate = useNavigate();
   const [who, setWho] = useState<Whoami | null>(null);
@@ -63,10 +58,6 @@ export default function Admin() {
     })();
   }, [navigate, refresh]);
 
-  // Live dashboard: re-poll the stats every 30s so new signups show up without
-  // a manual reload. Only the lightweight stats call is polled (events/admins
-  // refresh on their own actions). Paused while the tab is hidden to avoid
-  // pointless background traffic.
   useEffect(() => {
     if (!who?.isAdmin) return;
     const id = setInterval(() => {
@@ -78,12 +69,11 @@ export default function Admin() {
   }, [who]);
 
   if (!who) return <div className="adm"><p className="adm__loading">Checking access…</p></div>;
-  if (!who.isAdmin) return null; // redirecting
+  if (!who.isAdmin) return null;
 
   return (
     <div className="adm">
       <div className="adm__container">
-        {/* Workspace switcher — admin has two: this dashboard and the normal app. */}
         <div className="adm__ws">
           <button className="adm__ws-tab adm__ws-tab--active" type="button">
             ◆ Admin Dashboard
@@ -101,7 +91,7 @@ export default function Admin() {
           <span className="adm__live"><span className="adm__live-dot" /> Live — updates automatically</span>
         </header>
 
-        <StatsSection stats={stats} />
+        <StatsSection stats={stats} toolStats={toolStats} />
 
         <ToolStats stats={toolStats} />
 
@@ -125,21 +115,83 @@ export default function Admin() {
 
 /* ── Stats + charts ───────────────────────────────────────────────────────── */
 
-function StatsSection({ stats }: { stats: DashboardStats | null }) {
+function StatsSection({ stats, toolStats }: { stats: DashboardStats | null; toolStats: ToolStat[] }) {
   if (!stats) return <section className="adm__card"><p className="adm__empty">Loading stats…</p></section>;
+
   const cumulative = (() => {
     let run = stats.totalUsers - stats.perDay.reduce((a, d) => a + d.count, 0);
     return stats.perDay.map((d) => ({ date: d.date, count: (run += d.count) }));
   })();
 
+  const totalToolUsage = toolStats.reduce((a, s) => a + s.count, 0);
+  const sparkData = stats.perDay.map((d) => d.count);
+
+  const weekGrowth = stats.perDay.length >= 7
+    ? stats.perDay.slice(-7).reduce((a, d) => a + d.count, 0)
+    : stats.newThisWeek;
+  const prevWeek = stats.perDay.length >= 14
+    ? stats.perDay.slice(0, 7).reduce((a, d) => a + d.count, 0)
+    : 0;
+  const growthPct = prevWeek > 0 ? Math.round(((weekGrowth - prevWeek) / prevWeek) * 100) : 0;
+
   return (
     <>
-      <div className="adm__stats">
-        <StatCard num={stats.totalUsers} label="Total users" />
-        <StatCard num={stats.newToday} label="New today" accent />
-        <StatCard num={stats.newThisWeek} label="New this week" />
-        <StatCard num={stats.totalEvents} label="Events created" />
-        <StatCard num={stats.emailsSent} label="Emails sent" />
+      <div className="adm__kpi-grid">
+        <div className="adm__kpi">
+          <div className="adm__kpi-icon">👥</div>
+          <div className="adm__kpi-body">
+            <span className="adm__kpi-num">{stats.totalUsers.toLocaleString()}</span>
+            <span className="adm__kpi-label">Total users</span>
+          </div>
+          <MiniSparkline data={cumulative.map((d) => d.count)} />
+        </div>
+
+        <div className="adm__kpi adm__kpi--accent">
+          <div className="adm__kpi-icon">✦</div>
+          <div className="adm__kpi-body">
+            <span className="adm__kpi-num">{stats.newToday.toLocaleString()}</span>
+            <span className="adm__kpi-label">New today</span>
+          </div>
+          {stats.newToday > 0 && <span className="adm__kpi-badge">+{stats.newToday}</span>}
+        </div>
+
+        <div className="adm__kpi">
+          <div className="adm__kpi-icon">📈</div>
+          <div className="adm__kpi-body">
+            <span className="adm__kpi-num">{stats.newThisWeek.toLocaleString()}</span>
+            <span className="adm__kpi-label">This week</span>
+          </div>
+          {growthPct !== 0 && (
+            <span className={`adm__kpi-trend ${growthPct > 0 ? 'adm__kpi-trend--up' : 'adm__kpi-trend--down'}`}>
+              {growthPct > 0 ? '↑' : '↓'} {Math.abs(growthPct)}%
+            </span>
+          )}
+        </div>
+
+        <div className="adm__kpi">
+          <div className="adm__kpi-icon">📧</div>
+          <div className="adm__kpi-body">
+            <span className="adm__kpi-num">{stats.emailsSent.toLocaleString()}</span>
+            <span className="adm__kpi-label">Emails sent</span>
+          </div>
+        </div>
+
+        <div className="adm__kpi">
+          <div className="adm__kpi-icon">📅</div>
+          <div className="adm__kpi-body">
+            <span className="adm__kpi-num">{stats.totalEvents.toLocaleString()}</span>
+            <span className="adm__kpi-label">Events</span>
+          </div>
+        </div>
+
+        <div className="adm__kpi">
+          <div className="adm__kpi-icon">⚡</div>
+          <div className="adm__kpi-body">
+            <span className="adm__kpi-num">{totalToolUsage.toLocaleString()}</span>
+            <span className="adm__kpi-label">Tool runs</span>
+          </div>
+          <MiniSparkline data={sparkData} color="#1a1a1a" />
+        </div>
       </div>
 
       <div className="adm__charts">
@@ -156,15 +208,6 @@ function StatsSection({ stats }: { stats: DashboardStats | null }) {
   );
 }
 
-function StatCard({ num, label, accent }: { num: number; label: string; accent?: boolean }) {
-  return (
-    <div className={`adm__stat${accent ? ' adm__stat--accent' : ''}`}>
-      <span className="adm__stat-num">{num.toLocaleString()}</span>
-      <span className="adm__stat-label">{label}</span>
-    </div>
-  );
-}
-
 /* ── Product card tags ────────────────────────────────────────────────────── */
 
 const VARIANT_LABELS: Record<ProductTag['tagVariant'], string> = {
@@ -174,9 +217,6 @@ const VARIANT_LABELS: Record<ProductTag['tagVariant'], string> = {
 };
 
 function ProductTags() {
-  // Editor state starts from the built-in defaults and is overlaid with
-  // whatever the backend has saved. Saving writes the FULL map so the
-  // products page never mixes stale and fresh entries.
   const [tags, setTags] = useState<ProductTagMap>(() =>
     Object.fromEntries(PRODUCT_DEFS.map((p) => [p.key, { tag: p.tag, tagVariant: p.tagVariant }])),
   );
@@ -277,7 +317,7 @@ function EmailSettingsCard() {
   const [effective, setEffective] = useState<EmailEffective | null>(null);
   const [gmailUser, setGmailUser] = useState('');
   const [fromName, setFromName] = useState('');
-  const [password, setPassword] = useState(''); // blank = keep saved / env
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
@@ -297,7 +337,6 @@ function EmailSettingsCard() {
       const r = await adminApi.saveEmailSettings({
         gmailUser: gmailUser.trim(),
         fromName: fromName.trim(),
-        // only send the password when the admin typed one — otherwise keep
         ...(password.trim() ? { gmailAppPassword: password.trim() } : {}),
       });
       setCfg(r.config);
@@ -465,6 +504,10 @@ function BillingCard() {
 
   const now = new Date().toISOString();
   const activeSubs = subs.filter((s) => s.status === 'active' && s.expires_at > now);
+  const totalRevenue = subs.reduce((sum, s) => {
+    const plan = cfg.plans.find((p) => p.id === s.plan_id);
+    return sum + (plan?.priceInr ?? 0);
+  }, 0);
 
   return (
     <section className="adm__card">
@@ -485,6 +528,29 @@ function BillingCard() {
           ? 'users are limited by their plan'
           : 'all tools free and unlimited for everyone'}
       </label>
+
+      {cfg.enabled && subs.length > 0 && (
+        <div className="adm__billing-summary">
+          <div className="adm__billing-metric">
+            <span className="adm__billing-metric-num">{activeSubs.length}</span>
+            <span className="adm__billing-metric-label">Active subs</span>
+          </div>
+          <div className="adm__billing-metric">
+            <span className="adm__billing-metric-num">₹{totalRevenue.toLocaleString('en-IN')}</span>
+            <span className="adm__billing-metric-label">Total revenue</span>
+          </div>
+          <div className="adm__billing-metric">
+            <span className="adm__billing-metric-num">{subs.length}</span>
+            <span className="adm__billing-metric-label">All-time subs</span>
+          </div>
+          <DonutChart
+            value={activeSubs.length}
+            max={subs.length || 1}
+            label="Active rate"
+            color="#2ea043"
+          />
+        </div>
+      )}
 
       <div className="adm__row">
         <div className="adm__col">
@@ -570,8 +636,15 @@ function BillingCard() {
               <tr key={s.id}>
                 <td>{s.email}</td>
                 <td>{s.plan_id}</td>
-                <td>{s.status === 'active' && s.expires_at > now ? '✓ active'
-                  : s.status === 'cancelled' ? 'cancelled' : 'expired'}</td>
+                <td>
+                  <span className={`adm__status ${
+                    s.status === 'active' && s.expires_at > now ? 'adm__status--active' :
+                    s.status === 'cancelled' ? 'adm__status--cancel' : 'adm__status--expired'
+                  }`}>
+                    {s.status === 'active' && s.expires_at > now ? 'Active'
+                      : s.status === 'cancelled' ? 'Cancelled' : 'Expired'}
+                  </span>
+                </td>
                 <td>{new Date(s.expires_at).toLocaleDateString('en-IN')}</td>
               </tr>
             ))}
@@ -939,24 +1012,43 @@ const TOOL_LABELS: Record<string, string> = {
   'index-generator': 'Index Generator',
 };
 
+const TOOL_COLORS: Record<string, string> = {
+  'document-prep': '#1a1a1a',
+  'page-numbering': '#b8962e',
+  'annexures': '#2e6fb8',
+  'signatures': '#8b3a2a',
+  'bookmarks': '#2ea043',
+  'index-generator': '#7c3aed',
+};
+
 function ToolStats({ stats }: { stats: ToolStat[] }) {
+  const total = stats.reduce((a, s) => a + s.count, 0);
   const max = Math.max(...stats.map((s) => s.count), 1);
+
   return (
     <section className="adm__card">
-      <h2 className="adm__card-title">Tool usage</h2>
+      <div className="adm__card-header">
+        <h2 className="adm__card-title" style={{ margin: 0 }}>Tool usage</h2>
+        {total > 0 && <span className="adm__tool-total">{total} total runs</span>}
+      </div>
       {stats.length === 0 ? (
         <p className="adm__empty">No usage data yet — will populate as users complete tool runs.</p>
       ) : (
         <div className="adm__tool-stats">
-          {stats.map((s) => (
-            <div key={s.tool} className="adm__tool-row">
-              <span className="adm__tool-name">{TOOL_LABELS[s.tool] ?? s.tool}</span>
-              <div className="adm__tool-bar-wrap">
-                <div className="adm__tool-bar" style={{ width: `${(s.count / max) * 100}%` }} />
+          {stats.map((s) => {
+            const pct = total > 0 ? Math.round((s.count / total) * 100) : 0;
+            const color = TOOL_COLORS[s.tool] ?? '#1a1a1a';
+            return (
+              <div key={s.tool} className="adm__tool-row">
+                <span className="adm__tool-name">{TOOL_LABELS[s.tool] ?? s.tool}</span>
+                <div className="adm__tool-bar-wrap">
+                  <div className="adm__tool-bar" style={{ width: `${(s.count / max) * 100}%`, background: color }} />
+                </div>
+                <span className="adm__tool-count">{s.count}</span>
+                <span className="adm__tool-pct">{pct}%</span>
               </div>
-              <span className="adm__tool-count">{s.count}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
