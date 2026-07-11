@@ -97,9 +97,19 @@ function saveTemplates(list: CaseTemplate[]): void {
   }
 }
 
+/** The guided steps, in order. Each one asks a single plain question so the
+ * form never feels like one giant legal wall. */
+const STEPS = [
+  { key: 'court', title: 'Court & Case', ask: 'Which court and case is this filing for?' },
+  { key: 'parties', title: 'Parties', ask: 'Who is the case between?' },
+  { key: 'contents', title: 'Index Contents', ask: 'What documents are inside, on which pages?' },
+  { key: 'finish', title: 'Sign & Generate', ask: 'Who is filing it — then download.' },
+] as const;
+
 export default function IndexGeneratorTool() {
   const doc = useFileList();
   const [phase, setPhase] = useState<'edit' | 'seeding' | 'generating' | 'done' | 'error'>('edit');
+  const [step, setStep] = useState(0);
   const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const nextId = useRef(0);
@@ -443,6 +453,22 @@ export default function IndexGeneratorTool() {
           <>
             {errorMsg && <p className="ix__hint ix__hint--warn">{errorMsg}</p>}
 
+            {/* Step chips — click any completed/earlier step to jump back. */}
+            <nav className="ix__steps" aria-label="Steps">
+              {STEPS.map((s, i) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  className={`ix__step${i === step ? ' ix__step--active' : ''}${i < step ? ' ix__step--done' : ''}`}
+                  onClick={() => setStep(i)}
+                >
+                  <span className="ix__step-num">{i < step ? '✓' : i + 1}</span>
+                  <span className="ix__step-title">{s.title}</span>
+                </button>
+              ))}
+            </nav>
+            <p className="ix__ask">{STEPS[step].ask}</p>
+
             {pendingDraft && (
               <div className="ix__draft">
                 <p>
@@ -466,9 +492,10 @@ export default function IndexGeneratorTool() {
               </div>
             )}
 
-            {/* ── Document (optional) ── */}
+            {/* ── Step 3: document (optional) ── */}
+            {step === 2 && (
             <section className="er__upload-section">
-              <h2 className="er__section-heading">Document (optional)</h2>
+              <h2 className="er__section-heading">Your Document (optional)</h2>
               {chainedFrom && (
                 <p className="rp__chip">✓ Document carried over from {chainedFrom} — ready to go.</p>
               )}
@@ -510,13 +537,15 @@ export default function IndexGeneratorTool() {
                 </>
               )}
             </section>
+            )}
 
-            {/* ── Case templates ── */}
+            {/* ── Step 1: saved cases + court & case ── */}
+            {step === 0 && templates.length > 0 && (
             <section className="er__upload-section">
-              <h2 className="er__section-heading">Case Templates</h2>
+              <h2 className="er__section-heading">Load a Saved Case</h2>
               <p className="ix__hint">
-                Save the details you re-type every time (court, parties, advocates) under a name
-                and load them with one click. Stored only in this browser.
+                Filed for this case before? Apply a saved template — court, parties and
+                advocates fill themselves in.
               </p>
               {templates.length > 0 && (
                 <div className="ix__tpl-list">
@@ -542,28 +571,20 @@ export default function IndexGeneratorTool() {
                   ))}
                 </div>
               )}
-              <div className="ix__tpl-save">
-                <input
-                  type="text"
-                  value={templateName}
-                  maxLength={60}
-                  placeholder='Template name — e.g. "NCLT Delhi / Auto Needs matter"'
-                  onChange={(e) => setTemplateName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && saveCurrentAsTemplate()}
-                />
-                <button type="button" className="er__btn er__btn--outline" onClick={saveCurrentAsTemplate}>
-                  Save Current Details
-                </button>
-              </div>
               {templateNotice && <p className="ix__tpl-notice">{templateNotice}</p>}
             </section>
+            )}
 
-            {/* ── Court & case ── */}
+            {step === 0 && (
             <section className="er__upload-section">
               <h2 className="er__section-heading">Court &amp; Case</h2>
+              <p className="ix__hint">
+                This appears at the very top of the index, exactly as you type it — press Enter
+                where you want a new line on the page.
+              </p>
               <div className="ix__grid">
                 <label className="ix__field">
-                  <span>Court (one line per row)</span>
+                  <span>Court name</span>
                   <textarea
                     rows={2}
                     value={court}
@@ -572,7 +593,7 @@ export default function IndexGeneratorTool() {
                   />
                 </label>
                 <label className="ix__field">
-                  <span>Case numbers (one line per row)</span>
+                  <span>Case numbers</span>
                   <textarea
                     rows={3}
                     value={caseLines}
@@ -582,10 +603,16 @@ export default function IndexGeneratorTool() {
                 </label>
               </div>
             </section>
+            )}
 
-            {/* ── Parties ── */}
+            {/* ── Step 2: parties ── */}
+            {step === 1 && (
             <section className="er__upload-section">
               <h2 className="er__section-heading">Parties</h2>
+              <p className="ix__hint">
+                Type each party's name and address in the big box, and their role (Applicant,
+                Respondent…) in the small one. "Versus" is placed between parties automatically.
+              </p>
               {matters.map((m) => (
                 <div key={m.id} className="ix__matter">
                   <div className="ix__matter-head">
@@ -645,10 +672,17 @@ export default function IndexGeneratorTool() {
                 + Add "AND IN THE MATTER OF" Section
               </button>
             </section>
+            )}
 
-            {/* ── Index rows ── */}
+            {/* ── Step 3: index rows ── */}
+            {step === 2 && (
             <section className="er__upload-section">
               <h2 className="er__section-heading">Index Contents</h2>
+              <p className="ix__hint">
+                Each row becomes one line of the index table — the document's name and the pages
+                it sits on. Uploaded a document above? "Auto-fill" reads its structure and fills
+                these rows for you.
+              </p>
               <div className="ix__grid">
                 <label className="ix__field">
                   <span>Index title</span>
@@ -703,13 +737,19 @@ export default function IndexGeneratorTool() {
                 + Add Row
               </button>
             </section>
+            )}
 
-            {/* ── Filing block ── */}
+            {/* ── Step 4: filing block + generate ── */}
+            {step === 3 && (
             <section className="er__upload-section">
               <h2 className="er__section-heading">Filing Details</h2>
+              <p className="ix__hint">
+                This is the signature block at the bottom of the index — your advocates' names
+                appear on the right, place and date on the left.
+              </p>
               <div className="ix__grid">
                 <label className="ix__field">
-                  <span>Advocates block (one line per row, right-aligned in output)</span>
+                  <span>Advocates (one line each, e.g. names, "ADVOCATES", firm, address)</span>
                   <textarea
                     rows={4}
                     value={advocates}
@@ -728,16 +768,60 @@ export default function IndexGeneratorTool() {
                   </label>
                 </div>
               </div>
-            </section>
 
-            <button
-              type="button"
-              className="er__btn er__btn--primary"
-              disabled={!canGenerate}
-              onClick={generate}
-            >
-              Generate Index{prepend && doc.files.length > 0 ? ' + Document' : ''} &amp; Download
-            </button>
+              {/* What will come out, in plain words, before the button. */}
+              <div className="ix__review">
+                <p>
+                  Ready:{' '}
+                  <strong>
+                    {validRows.length} index row{validRows.length === 1 ? '' : 's'}
+                  </strong>
+                  {prepend && doc.files.length > 0
+                    ? ' — the index will be attached to the front of your uploaded document.'
+                    : ' — a standalone index PDF will be generated.'}
+                  {validRows.length === 0 && ' Add at least one row in "Index Contents" first.'}
+                </p>
+              </div>
+
+              <div className="ix__tpl-save">
+                <input
+                  type="text"
+                  value={templateName}
+                  maxLength={60}
+                  placeholder='Save this case for next time — e.g. "NCLT Delhi / Auto Needs"'
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && saveCurrentAsTemplate()}
+                />
+                <button type="button" className="er__btn er__btn--outline" onClick={saveCurrentAsTemplate}>
+                  Save as Template
+                </button>
+              </div>
+              {templateNotice && <p className="ix__tpl-notice">{templateNotice}</p>}
+            </section>
+            )}
+
+            {/* Back / Next / Generate */}
+            <div className="ix__nav">
+              {step > 0 ? (
+                <button type="button" className="er__btn er__btn--outline" onClick={() => setStep(step - 1)}>
+                  ← Back
+                </button>
+              ) : <span />}
+              {step < STEPS.length - 1 ? (
+                <button type="button" className="er__btn er__btn--primary" onClick={() => setStep(step + 1)}>
+                  Next: {STEPS[step + 1].title} →
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="er__btn er__btn--primary"
+                  disabled={!canGenerate}
+                  onClick={generate}
+                >
+                  Generate Index{prepend && doc.files.length > 0 ? ' + Document' : ''} &amp; Download
+                </button>
+              )}
+            </div>
           </>
         )}
       </div>

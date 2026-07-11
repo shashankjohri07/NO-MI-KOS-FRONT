@@ -3,6 +3,97 @@
    from ErrorReport.css. The er__upload-section centers its children, so
    every top-level block here stretches itself back to full width. */
 
+/* Step wizard */
+.ix__steps {
+  align-self: stretch;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+.ix__step {
+  flex: 1;
+  min-width: 9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--border, #e0d9c8);
+  border-radius: 2px;
+  padding: 0.6rem 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ix__step:hover {
+  border-color: var(--gold, #b8962e);
+}
+.ix__step--active {
+  border-color: var(--gold, #b8962e);
+  background: rgba(184, 150, 46, 0.08);
+  box-shadow: 0 0 0 3px rgba(184, 150, 46, 0.1);
+}
+.ix__step--done {
+  border-color: var(--sage, #3a5a4a);
+}
+.ix__step-num {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--muted, #8a8272);
+  font-family: var(--mono, monospace);
+  font-size: 0.7rem;
+  color: var(--muted, #8a8272);
+}
+.ix__step--active .ix__step-num {
+  border-color: var(--gold, #b8962e);
+  background: var(--gold, #b8962e);
+  color: #fff;
+}
+.ix__step--done .ix__step-num {
+  border-color: var(--sage, #3a5a4a);
+  background: var(--sage, #3a5a4a);
+  color: #fff;
+}
+.ix__step-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.ix__ask {
+  align-self: stretch;
+  font-size: 1rem;
+  font-style: italic;
+  color: var(--muted, #8a8272);
+  margin: 0 0 1.2rem;
+  text-align: center;
+}
+
+.ix__review {
+  align-self: stretch;
+  border-left: 3px solid var(--sage, #3a5a4a);
+  background: rgba(58, 90, 74, 0.06);
+  padding: 0.7rem 1rem;
+  margin-top: 0.8rem;
+}
+.ix__review p {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.ix__nav {
+  align-self: stretch;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.6rem;
+}
+
 .ix__hint {
   font-size: 0.82rem;
   color: var(--muted, #8a8272);
