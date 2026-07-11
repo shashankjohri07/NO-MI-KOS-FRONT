@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { documentApi, trackTool, type IndexPayload, type IndexRow } from '../../services/documentApi';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
+import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
@@ -237,12 +238,9 @@ export default function IndexGeneratorTool() {
         )}
 
         {busy && (
-          <div className="er__processing">
-            <div className="er__spinner" />
-            <p className="er__processing-text">
-              {phase === 'seeding' ? 'Reading document structure…' : 'Generating index…'}
-            </p>
-          </div>
+          <ProcessingPanel
+            label={phase === 'seeding' ? 'Reading document structure' : 'Generating the index'}
+          />
         )}
 
         {phase === 'edit' && (
