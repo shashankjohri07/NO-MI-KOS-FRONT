@@ -1,6 +1,6 @@
 /* ============================================================================
-   Admin dashboard (events + email blast). Follows the site vocabulary used by
-   ErrorReport.css — BEM-ish class names, CSS variables for ink/paper/serif.
+   Admin dashboard — redesigned with KPI cards, improved charts, and better
+   data visualization. BEM-ish, CSS variables for ink/paper/serif.
    ============================================================================ */
 
 .adm {
@@ -10,7 +10,7 @@
 }
 
 .adm__container {
-  max-width: 800px;
+  max-width: 860px;
   margin: 0 auto;
   animation: fadeUp 0.5s ease;
 }
@@ -43,43 +43,119 @@
   font-weight: 300;
 }
 
-/* --- stat strip ------------------------------------------------------------ */
-.adm__stats {
-  display: flex;
-  justify-content: center;
+/* --- KPI grid -------------------------------------------------------------- */
+.adm__kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.9rem;
   margin-bottom: 2rem;
 }
 
-.adm__stat {
+.adm__kpi {
   background: #fff;
   border: 1px solid #e8e2d4;
-  border-radius: 12px;
-  padding: 1rem 2rem;
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem;
   display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
+  align-items: center;
+  gap: 0.8rem;
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.adm__stat-num {
+.adm__kpi:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.adm__kpi--accent {
+  border-color: var(--gold, #b8962e);
+  background: linear-gradient(135deg, #fffdf5 0%, #fff9e6 100%);
+}
+
+.adm__kpi-icon {
+  font-size: 1.4rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f7f3ea;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.adm__kpi--accent .adm__kpi-icon {
+  background: rgba(184, 150, 46, 0.12);
+}
+
+.adm__kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.adm__kpi-num {
   font-family: var(--serif);
-  font-size: 2rem;
+  font-size: 1.6rem;
   font-weight: 700;
   color: var(--ink);
+  line-height: 1.1;
 }
 
-.adm__stat-label {
+.adm__kpi-label {
   font-family: var(--sans);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.adm__kpi-badge {
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #2ea043;
+  background: #eef7ee;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.adm__kpi-trend {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.adm__kpi-trend--up {
+  color: #2ea043;
+  background: #eef7ee;
+}
+
+.adm__kpi-trend--down {
+  color: #a23030;
+  background: #fdf0ef;
+}
+
+.adm__sparkline {
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 
 /* --- cards ------------------------------------------------------------------ */
 .adm__card {
   background: #fff;
   border: 1px solid #e8e2d4;
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 1.75rem 2rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .adm__card-title {
@@ -111,12 +187,14 @@
   border-radius: 8px;
   background: #fffdf8;
   color: var(--ink);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .adm__input:focus,
 .adm__textarea:focus {
   outline: none;
   border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.06);
 }
 
 .adm__textarea {
@@ -172,7 +250,7 @@
   border-radius: 8px;
   cursor: pointer;
   border: 1px solid var(--ink);
-  transition: opacity 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .adm__btn:disabled {
@@ -185,9 +263,17 @@
   color: #fff;
 }
 
+.adm__btn--primary:hover:not(:disabled) {
+  background: #333;
+}
+
 .adm__btn--outline {
   background: transparent;
   color: var(--ink);
+}
+
+.adm__btn--outline:hover:not(:disabled) {
+  background: #f7f3ea;
 }
 
 /* --- compose + preview ------------------------------------------------------------ */
@@ -274,20 +360,45 @@
   text-align: left;
   font-weight: 600;
   color: var(--muted);
-  padding: 0.45rem 0.6rem;
-  border-bottom: 1px solid #e8e2d4;
+  padding: 0.55rem 0.6rem;
+  border-bottom: 2px solid #e8e2d4;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .adm__table td {
-  padding: 0.55rem 0.6rem;
+  padding: 0.65rem 0.6rem;
   border-bottom: 1px solid #f1ece0;
   color: var(--ink);
 }
 
-@media (max-width: 640px) {
-  .adm__row {
-    grid-template-columns: 1fr;
-  }
+.adm__table tr:hover td {
+  background: #fdfbf6;
+}
+
+/* --- status badges ----------------------------------------------------------- */
+.adm__status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.adm__status--active {
+  color: #2ea043;
+  background: #eef7ee;
+}
+
+.adm__status--cancel {
+  color: #b8962e;
+  background: #fffaf0;
+}
+
+.adm__status--expired {
+  color: #a23030;
+  background: #fdf0ef;
 }
 
 /* --- workspace switcher --------------------------------------------------- */
@@ -320,34 +431,52 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
-/* --- accent stat ----------------------------------------------------------- */
-.adm__stats { flex-wrap: wrap; gap: 0.9rem; }
-.adm__stat { flex-direction: column; align-items: flex-start; gap: 0.15rem; min-width: 120px; }
-.adm__stat--accent { border-color: var(--gold); background: #fffaf0; }
-
 /* --- charts ---------------------------------------------------------------- */
 .adm__charts {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.25rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 .adm__chart-card {
   background: #fff;
   border: 1px solid #e8e2d4;
-  border-radius: 12px;
-  padding: 1.1rem 1.25rem;
+  border-radius: 14px;
+  padding: 1.25rem 1.5rem;
 }
 .adm__chart-title {
   font-family: var(--sans);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--muted);
-  margin: 0 0 0.6rem;
+  margin: 0 0 0.8rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 .adm__svg { width: 100%; height: auto; display: block; }
+
+/* --- live indicator -------------------------------------------------------- */
+.adm__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+.adm__live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2ea043;
+  animation: admPulse 2s ease-in-out infinite;
+}
+@keyframes admPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
 
 /* --- manage admins --------------------------------------------------------- */
 .adm__hint {
@@ -378,44 +507,18 @@
   border-radius: 6px;
   padding: 0.25rem 0.7rem;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 .adm__admin-remove:hover:not(:disabled) { background: #fdf0ef; }
 .adm__admin-add { display: flex; gap: 0.6rem; align-items: stretch; }
 .adm__admin-add .adm__input { margin: 0; flex: 1; }
 .adm__admin-add .adm__btn { white-space: nowrap; }
 
-@media (max-width: 720px) {
-  .adm__charts { grid-template-columns: 1fr; }
-}
-
-/* --- live indicator -------------------------------------------------------- */
-.adm__live {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.6rem;
-  font-family: var(--sans);
-  font-size: 0.72rem;
-  color: var(--muted);
-  letter-spacing: 0.03em;
-}
-.adm__live-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #2ea043;
-  animation: admPulse 2s ease-in-out infinite;
-}
-@keyframes admPulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.75); }
-}
-
 /* --- tool usage stats -------------------------------------------------------- */
-.adm__tool-stats { display: flex; flex-direction: column; gap: 0.7rem; }
+.adm__tool-stats { display: flex; flex-direction: column; gap: 0.75rem; }
 .adm__tool-row {
   display: grid;
-  grid-template-columns: 140px 1fr 40px;
+  grid-template-columns: 130px 1fr 42px 42px;
   align-items: center;
   gap: 0.75rem;
 }
@@ -424,26 +527,38 @@
   font-size: 0.85rem;
   color: var(--ink);
   white-space: nowrap;
+  font-weight: 500;
 }
 .adm__tool-bar-wrap {
   background: #f0ece2;
-  border-radius: 4px;
-  height: 10px;
+  border-radius: 6px;
+  height: 12px;
   overflow: hidden;
 }
 .adm__tool-bar {
   height: 100%;
-  background: var(--ink);
-  border-radius: 4px;
-  transition: width 0.4s ease;
+  border-radius: 6px;
+  transition: width 0.5s ease;
   min-width: 4px;
 }
 .adm__tool-count {
   font-family: var(--sans);
-  font-size: 0.82rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: right;
+}
+.adm__tool-pct {
+  font-family: var(--sans);
+  font-size: 0.72rem;
   color: var(--muted);
   text-align: right;
+}
+.adm__tool-total {
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 500;
 }
 
 /* --- feedback list ----------------------------------------------------------- */
@@ -505,7 +620,7 @@
 
 .adm__plan {
   border: 1px solid var(--border, #e0d9c8);
-  border-radius: 4px;
+  border-radius: 10px;
   padding: 1rem;
   margin-top: 1rem;
   display: flex;
@@ -541,4 +656,71 @@
 }
 .adm__plan-tool input {
   accent-color: var(--gold, #b8962e);
+}
+
+/* --- billing summary metrics ------------------------------------------------- */
+.adm__billing-summary {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: #f9f7f2;
+  border: 1px solid #e8e2d4;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.adm__billing-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.adm__billing-metric-num {
+  font-family: var(--serif);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.adm__billing-metric-label {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* --- donut chart ------------------------------------------------------------ */
+.adm__donut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.adm__donut-label {
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* --- responsive ------------------------------------------------------------ */
+@media (max-width: 720px) {
+  .adm__charts { grid-template-columns: 1fr; }
+  .adm__kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .adm__row {
+    grid-template-columns: 1fr;
+  }
+  .adm__kpi-grid { grid-template-columns: 1fr; }
+  .adm__tool-row {
+    grid-template-columns: 100px 1fr 36px 36px;
+  }
 }
