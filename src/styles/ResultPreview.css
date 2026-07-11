@@ -1,0 +1,52 @@
+/* Result preview panel — inline PDF check before download. */
+
+.rp {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.rp__title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--sage, #3a5a4a);
+  margin: 0;
+}
+
+.rp__hint {
+  font-size: 0.82rem;
+  color: var(--muted, #8a8272);
+  margin: 0;
+}
+
+.rp__frame {
+  width: 100%;
+  height: 32rem;
+  border: 1px solid var(--border, #e0d9c8);
+  border-radius: 2px;
+  background: #525659; /* matches the PDF viewer chrome while loading */
+}
+
+.rp__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 0.25rem;
+}
+
+.rp__filename {
+  font-family: var(--mono, monospace);
+  font-size: 0.68rem;
+  color: var(--muted, #8a8272);
+  margin: 0;
+  word-break: break-all;
+}
+
+@media (max-width: 640px) {
+  .rp__frame {
+    height: 22rem;
+  }
+}

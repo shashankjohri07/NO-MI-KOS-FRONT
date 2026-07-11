@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
 import MainFileStep from '../ErrorReport/MainFileStep';
+import ResultPreview from '../../components/ResultPreview';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
 
@@ -10,6 +11,7 @@ export default function PageNumberingTool() {
   const main = useFileList();
   const [indexEndPage, setIndexEndPage] = useState('');
   const [phase, setPhase] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
+  const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const elapsedRef = useRef<number | null>(null);
@@ -30,15 +32,6 @@ export default function PageNumberingTool() {
     };
   }, [phase]);
 
-  const triggerDownload = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const safeIndexEnd = () => {
     const n = Number.parseInt(indexEndPage, 10);
     return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -47,6 +40,7 @@ export default function PageNumberingTool() {
   const reset = () => {
     main.reset();
     setIndexEndPage('');
+    setResult(null);
     setPhase('idle');
     setErrorMsg('');
   };
@@ -57,7 +51,7 @@ export default function PageNumberingTool() {
     setPhase('processing');
     try {
       const { blob, filename } = await documentApi.writePagination(main.files, safeIndexEnd());
-      triggerDownload(blob, filename);
+      setResult({ blob, filename });
       trackTool('page-numbering');
       setPhase('done');
     } catch (err: unknown) {
@@ -106,15 +100,14 @@ export default function PageNumberingTool() {
           </section>
         )}
 
-        {phase === 'done' && (
-          <section className="er__upload-section">
-            <div className="er__annex-prompt">
-              <p className="er__annex-prompt-title">✓ Numbered PDF downloaded.</p>
-              <button type="button" className="er__btn er__btn--primary" onClick={reset}>
-                Number Another
-              </button>
-            </div>
-          </section>
+        {phase === 'done' && result && (
+          <ResultPreview
+            blob={result.blob}
+            filename={result.filename}
+            message="✓ Numbered PDF ready."
+            onReset={reset}
+            resetLabel="Number Another"
+          />
         )}
 
         {phase === 'error' && (
