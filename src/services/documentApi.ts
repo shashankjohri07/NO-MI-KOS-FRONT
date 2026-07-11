@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { signalBackendWaking } from '../components/ProcessingPanel';
 
 // Default to the same-origin '/api' proxy (configured in nginx.conf +
 // vite.config.ts). Same-origin means CORS never applies — no preflight, no
@@ -386,6 +387,7 @@ export const documentApi = {
 // Poll /health until the dyno is awake. Render free-tier cold starts take
 // ~30-60s; cap the wait so a genuinely dead backend still surfaces an error.
 async function waitForBackendAwake(maxMs = 90000): Promise<void> {
+  signalBackendWaking(); // lets any visible ProcessingPanel switch its message
   const start = Date.now();
   while (Date.now() - start < maxMs) {
     try {
