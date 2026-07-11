@@ -1,0 +1,36 @@
+/* Quota strip on tool pages — quiet until the quota runs out. */
+
+.plan-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border: 1px solid var(--border, #e0d9c8);
+  border-left: 3px solid var(--gold, #b8962e);
+  background: rgba(184, 150, 46, 0.06);
+  padding: 0.6rem 1rem;
+  margin-bottom: 1.4rem;
+  font-size: 0.85rem;
+}
+.plan-banner--out {
+  border-left-color: var(--rust, #8b3a2a);
+  background: rgba(139, 58, 42, 0.07);
+  color: var(--rust, #8b3a2a);
+}
+.plan-banner__link {
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gold, #b8962e);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.plan-banner--out .plan-banner__link {
+  color: var(--rust, #8b3a2a);
+  font-weight: 700;
+}
+.plan-banner__link:hover {
+  text-decoration: underline;
+}

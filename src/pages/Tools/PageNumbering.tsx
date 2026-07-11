@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
 import { gateTool } from '../../services/billingApi';
+import PlanBanner from '../../components/PlanBanner';
 import MainFileStep from '../ErrorReport/MainFileStep';
 import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
@@ -68,6 +69,8 @@ export default function PageNumberingTool() {
             sequential page numbers are stamped from page (index + 1) onwards.
           </p>
         </header>
+
+        <PlanBanner />
 
         {(phase === 'idle' || phase === 'processing') && (
           <section className="er__upload-section">
