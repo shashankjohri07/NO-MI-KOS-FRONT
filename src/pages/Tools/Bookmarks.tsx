@@ -4,6 +4,7 @@ import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
+import { useChainedIntake } from '../../services/toolChain';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
 import '../../styles/Bookmarks.css';
@@ -30,6 +31,8 @@ export default function BookmarksTool() {
   useEffect(() => {
     documentApi.warmUp();
   }, []);
+
+  const chainedFrom = useChainedIntake(doc.add);
 
   const busy = phase === 'detecting' || phase === 'applying';
 
@@ -125,6 +128,9 @@ export default function BookmarksTool() {
           <>
             <section className="er__upload-section">
               <h2 className="er__section-heading">Document</h2>
+              {chainedFrom && (
+                <p className="rp__chip">✓ Document carried over from {chainedFrom} — ready to go.</p>
+              )}
               <Dropzone
                 inputId="bm-doc-upload"
                 inputRef={doc.inputRef}
@@ -259,6 +265,11 @@ export default function BookmarksTool() {
             filename={result.filename}
             message="✓ PDF ready with bookmarks."
             onReset={reset}
+            producedBy="Bookmarks"
+            nextSteps={[
+              { label: 'Stamp Signatures', to: '/tools/signatures' },
+              { label: 'Generate Index', to: '/tools/index-generator' },
+            ]}
           />
         )}
 
