@@ -34,6 +34,34 @@ const splitLines = (s: string) =>
     .map((l) => l.trim())
     .filter(Boolean);
 
+/** Draft auto-save: the whole form snapshot (ids stripped — they're
+ * reassigned on restore) lives in localStorage so a closed tab doesn't
+ * cost the user ten minutes of typing. Only text, never documents. */
+const DRAFT_KEY = 'nomikos:index-draft:v1';
+
+interface Draft {
+  court: string;
+  caseLines: string;
+  matters: { label: string; parties: { text: string; role: string }[] }[];
+  indexTitle: string;
+  rows: { title: string; description: string; pages: string }[];
+  advocates: string;
+  place: string;
+  date: string;
+  savedAt: number;
+}
+
+function loadDraft(): Draft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw) as Draft;
+    return d && typeof d === 'object' && Array.isArray(d.rows) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function IndexGeneratorTool() {
   const doc = useFileList();
   const [phase, setPhase] = useState<'edit' | 'seeding' | 'generating' | 'done' | 'error'>('edit');
@@ -71,6 +99,69 @@ export default function IndexGeneratorTool() {
   }, []);
 
   const chainedFrom = useChainedIntake(doc.add);
+
+  // ── Draft auto-save ──
+  // Offer to restore a saved draft once on mount; afterwards, snapshot the
+  // form to localStorage on every change (debounced).
+  const [pendingDraft, setPendingDraft] = useState<Draft | null>(() => loadDraft());
+  const draftArmed = useRef(false);
+
+  const restoreDraft = () => {
+    if (!pendingDraft) return;
+    setCourt(pendingDraft.court);
+    setCaseLines(pendingDraft.caseLines);
+    setMatters(
+      pendingDraft.matters.map((m) => ({
+        id: id(),
+        label: m.label,
+        parties: m.parties.map((p) => ({ id: id(), text: p.text, role: p.role })),
+      }))
+    );
+    setIndexTitle(pendingDraft.indexTitle);
+    setRows(pendingDraft.rows.map((r) => ({ id: id(), ...r })));
+    setAdvocates(pendingDraft.advocates);
+    setPlace(pendingDraft.place);
+    setDate(pendingDraft.date);
+    setPendingDraft(null);
+    draftArmed.current = true;
+  };
+
+  const discardDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+    setPendingDraft(null);
+    draftArmed.current = true;
+  };
+
+  useEffect(() => {
+    // Don't overwrite a not-yet-answered draft prompt with the defaults.
+    if (pendingDraft && !draftArmed.current) return;
+    const t = window.setTimeout(() => {
+      const draft: Draft = {
+        court,
+        caseLines,
+        matters: matters.map((m) => ({
+          label: m.label,
+          parties: m.parties.map(({ text, role }) => ({ text, role })),
+        })),
+        indexTitle,
+        rows: rows.map(({ title, description, pages }) => ({
+          title,
+          description: description || '',
+          pages,
+        })),
+        advocates,
+        place,
+        date,
+        savedAt: Date.now(),
+      };
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      } catch {
+        // storage full/blocked — drafts are best-effort
+      }
+    }, 800);
+    return () => window.clearTimeout(t);
+  }, [court, caseLines, matters, indexTitle, rows, advocates, place, date, pendingDraft]);
 
   // ── Matters editing ──
   const patchMatter = (mid: number, patch: Partial<Matter>) =>
@@ -254,6 +345,29 @@ export default function IndexGeneratorTool() {
         {phase === 'edit' && (
           <>
             {errorMsg && <p className="ix__hint ix__hint--warn">{errorMsg}</p>}
+
+            {pendingDraft && (
+              <div className="ix__draft">
+                <p>
+                  📝 You have an unfinished index from{' '}
+                  {new Date(pendingDraft.savedAt).toLocaleString('en-IN', {
+                    day: 'numeric',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                  . Resume where you left off?
+                </p>
+                <div className="ix__draft-btns">
+                  <button type="button" className="er__btn er__btn--primary" onClick={restoreDraft}>
+                    Resume Draft
+                  </button>
+                  <button type="button" className="er__btn er__btn--outline" onClick={discardDraft}>
+                    Start Fresh
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* ── Document (optional) ── */}
             <section className="er__upload-section">
