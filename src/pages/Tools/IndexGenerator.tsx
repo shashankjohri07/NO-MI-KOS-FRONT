@@ -62,6 +62,40 @@ function loadDraft(): Draft | null {
   }
 }
 
+/** Saved case templates: the details a lawyer re-types on every filing
+ * (court, case numbers, parties, advocates, place) under a chosen name.
+ * localStorage only — per user's browser, nothing server-side. Rows and
+ * date are deliberately NOT part of a template: they're per-document. */
+const TEMPLATES_KEY = 'nomikos:index-templates:v1';
+
+interface CaseTemplate {
+  name: string;
+  savedAt: number;
+  court: string;
+  caseLines: string;
+  matters: { label: string; parties: { text: string; role: string }[] }[];
+  advocates: string;
+  place: string;
+}
+
+function loadTemplates(): CaseTemplate[] {
+  try {
+    const raw = localStorage.getItem(TEMPLATES_KEY);
+    const list = raw ? (JSON.parse(raw) as CaseTemplate[]) : [];
+    return Array.isArray(list) ? list.filter((t) => t && t.name) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTemplates(list: CaseTemplate[]): void {
+  try {
+    localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list.slice(0, 30)));
+  } catch {
+    // best-effort
+  }
+}
+
 export default function IndexGeneratorTool() {
   const doc = useFileList();
   const [phase, setPhase] = useState<'edit' | 'seeding' | 'generating' | 'done' | 'error'>('edit');
@@ -130,6 +164,62 @@ export default function IndexGeneratorTool() {
     localStorage.removeItem(DRAFT_KEY);
     setPendingDraft(null);
     draftArmed.current = true;
+  };
+
+  // ── Case templates ──
+  const [templates, setTemplates] = useState<CaseTemplate[]>(() => loadTemplates());
+  const [templateName, setTemplateName] = useState('');
+  const [templateNotice, setTemplateNotice] = useState('');
+
+  const applyTemplate = (name: string) => {
+    const t = templates.find((x) => x.name === name);
+    if (!t) return;
+    setCourt(t.court);
+    setCaseLines(t.caseLines);
+    setMatters(
+      t.matters.map((m) => ({
+        id: id(),
+        label: m.label,
+        parties: m.parties.map((p) => ({ id: id(), text: p.text, role: p.role })),
+      }))
+    );
+    setAdvocates(t.advocates);
+    setPlace(t.place);
+    setTemplateNotice(`Applied "${t.name}".`);
+    draftArmed.current = true;
+    setPendingDraft(null);
+  };
+
+  const saveCurrentAsTemplate = () => {
+    const name = templateName.trim();
+    if (!name) {
+      setTemplateNotice('Give the template a name first.');
+      return;
+    }
+    const t: CaseTemplate = {
+      name,
+      savedAt: Date.now(),
+      court,
+      caseLines,
+      matters: matters.map((m) => ({
+        label: m.label,
+        parties: m.parties.map(({ text, role }) => ({ text, role })),
+      })),
+      advocates,
+      place,
+    };
+    const next = [...templates.filter((x) => x.name !== name), t];
+    setTemplates(next);
+    saveTemplates(next);
+    setTemplateName('');
+    setTemplateNotice(`Saved "${name}" — it will be here next time.`);
+  };
+
+  const deleteTemplate = (name: string) => {
+    const next = templates.filter((x) => x.name !== name);
+    setTemplates(next);
+    saveTemplates(next);
+    setTemplateNotice(`Deleted "${name}".`);
   };
 
   useEffect(() => {
@@ -412,6 +502,53 @@ export default function IndexGeneratorTool() {
                   </div>
                 </>
               )}
+            </section>
+
+            {/* ── Case templates ── */}
+            <section className="er__upload-section">
+              <h2 className="er__section-heading">Case Templates</h2>
+              <p className="ix__hint">
+                Save the details you re-type every time (court, parties, advocates) under a name
+                and load them with one click. Stored only in this browser.
+              </p>
+              {templates.length > 0 && (
+                <div className="ix__tpl-list">
+                  {templates.map((t) => (
+                    <div key={t.name} className="ix__tpl">
+                      <span className="ix__tpl-name">{t.name}</span>
+                      <button
+                        type="button"
+                        className="ix__mini-btn"
+                        onClick={() => applyTemplate(t.name)}
+                      >
+                        Apply
+                      </button>
+                      <button
+                        type="button"
+                        className="ix__icon-btn"
+                        onClick={() => deleteTemplate(t.name)}
+                        aria-label={`Delete template ${t.name}`}
+                      >
+                        ✗
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="ix__tpl-save">
+                <input
+                  type="text"
+                  value={templateName}
+                  maxLength={60}
+                  placeholder='Template name — e.g. "NCLT Delhi / Auto Needs matter"'
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && saveCurrentAsTemplate()}
+                />
+                <button type="button" className="er__btn er__btn--outline" onClick={saveCurrentAsTemplate}>
+                  Save Current Details
+                </button>
+              </div>
+              {templateNotice && <p className="ix__tpl-notice">{templateNotice}</p>}
             </section>
 
             {/* ── Court & case ── */}
