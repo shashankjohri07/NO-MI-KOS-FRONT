@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
 import { gateTool } from '../../services/billingApi';
+import PlanBanner from '../../components/PlanBanner';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import { useFileList } from '../ErrorReport/useFileList';
@@ -94,6 +95,8 @@ export default function SignaturesTool() {
             Upload your document, choose which pages to sign, and provide signature images.
           </p>
         </header>
+
+        <PlanBanner />
 
         {(phase === 'idle' || phase === 'processing') && (
           <>

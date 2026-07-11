@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { documentApi, trackTool, type BookmarkHeading } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
 import { gateTool } from '../../services/billingApi';
+import PlanBanner from '../../components/PlanBanner';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
@@ -131,6 +132,8 @@ export default function BookmarksTool() {
             download a copy with clickable bookmarks built in.
           </p>
         </header>
+
+        <PlanBanner />
 
         {(phase === 'idle' || phase === 'detecting') && (
           <>
