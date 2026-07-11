@@ -197,6 +197,11 @@ export default function SignaturesTool() {
             filename={result.filename}
             message="✓ PDF ready with signatures."
             onReset={reset}
+            summary={[
+              [clientSig && 'client', advocateSig && 'advocate'].filter(Boolean).join(' + ') +
+                ' signature stamped',
+              signPages.trim() ? `on pages ${signPages.trim()}` : 'on every page',
+            ]}
             producedBy="Signatures"
             nextSteps={[
               { label: 'Add Bookmarks', to: '/tools/bookmarks' },
