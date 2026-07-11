@@ -4,6 +4,7 @@ import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
+import { useChainedIntake } from '../../services/toolChain';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
 
@@ -17,6 +18,8 @@ export default function AnnexuresTool() {
   useEffect(() => {
     documentApi.warmUp();
   }, []);
+
+  const chainedFrom = useChainedIntake(main.add);
 
   const reset = () => {
     main.reset();
@@ -58,6 +61,9 @@ export default function AnnexuresTool() {
           <>
             <section className="er__upload-section">
               <h2 className="er__section-heading">Main document</h2>
+              {chainedFrom && (
+                <p className="rp__chip">✓ Document carried over from {chainedFrom} — ready to go.</p>
+              )}
               <Dropzone
                 inputId="annex-main-upload"
                 inputRef={main.inputRef}
@@ -114,6 +120,12 @@ export default function AnnexuresTool() {
             filename={result.filename}
             message={`✓ PDF ready with ${annex.files.length} annexure${annex.files.length === 1 ? '' : 's'}.`}
             onReset={reset}
+            producedBy="Annexures"
+            nextSteps={[
+              { label: 'Stamp Signatures', to: '/tools/signatures' },
+              { label: 'Add Bookmarks', to: '/tools/bookmarks' },
+              { label: 'Generate Index', to: '/tools/index-generator' },
+            ]}
           />
         )}
 

@@ -4,6 +4,7 @@ import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
+import { useChainedIntake } from '../../services/toolChain';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
 import '../../styles/IndexGenerator.css';
@@ -68,6 +69,8 @@ export default function IndexGeneratorTool() {
   useEffect(() => {
     documentApi.warmUp();
   }, []);
+
+  const chainedFrom = useChainedIntake(doc.add);
 
   // ── Matters editing ──
   const patchMatter = (mid: number, patch: Partial<Matter>) =>
@@ -223,6 +226,11 @@ export default function IndexGeneratorTool() {
               setPhase('edit');
             }}
             resetLabel="Back to Editor"
+            producedBy="Index Generator"
+            nextSteps={[
+              { label: 'Add Bookmarks', to: '/tools/bookmarks' },
+              { label: 'Stamp Signatures', to: '/tools/signatures' },
+            ]}
           />
         )}
 
@@ -250,6 +258,9 @@ export default function IndexGeneratorTool() {
             {/* ── Document (optional) ── */}
             <section className="er__upload-section">
               <h2 className="er__section-heading">Document (optional)</h2>
+              {chainedFrom && (
+                <p className="rp__chip">✓ Document carried over from {chainedFrom} — ready to go.</p>
+              )}
               <p className="ix__hint">
                 Upload the paginated filing to auto-fill rows from its structure and to attach
                 the index in front of it. Number the pages first with the Page Numbering tool

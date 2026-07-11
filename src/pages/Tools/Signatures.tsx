@@ -6,6 +6,7 @@ import { useFileList } from '../ErrorReport/useFileList';
 import { parsePageSpec, formatPageSet } from '../ErrorReport/pageSpec';
 import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
+import { useChainedIntake } from '../../services/toolChain';
 import '../../styles/ErrorReport.css';
 
 export default function SignaturesTool() {
@@ -22,6 +23,8 @@ export default function SignaturesTool() {
   useEffect(() => {
     documentApi.warmUp();
   }, []);
+
+  const chainedFrom = useChainedIntake(doc.add);
 
   const pagePreview = useMemo(() => {
     const trimmed = signPages.trim();
@@ -88,6 +91,9 @@ export default function SignaturesTool() {
           <>
             <section className="er__upload-section">
               <h2 className="er__section-heading">Document</h2>
+              {chainedFrom && (
+                <p className="rp__chip">✓ Document carried over from {chainedFrom} — ready to go.</p>
+              )}
               <Dropzone
                 inputId="sig-doc-upload"
                 inputRef={doc.inputRef}
@@ -190,6 +196,11 @@ export default function SignaturesTool() {
             filename={result.filename}
             message="✓ PDF ready with signatures."
             onReset={reset}
+            producedBy="Signatures"
+            nextSteps={[
+              { label: 'Add Bookmarks', to: '/tools/bookmarks' },
+              { label: 'Generate Index', to: '/tools/index-generator' },
+            ]}
           />
         )}
 

@@ -3,6 +3,7 @@ import { documentApi, trackTool } from '../../services/documentApi';
 import MainFileStep from '../ErrorReport/MainFileStep';
 import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
+import { useChainedIntake } from '../../services/toolChain';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
 
@@ -18,6 +19,8 @@ export default function PageNumberingTool() {
   useEffect(() => {
     documentApi.warmUp();
   }, []);
+
+  const chainedFrom = useChainedIntake(main.add);
 
   const safeIndexEnd = () => {
     const n = Number.parseInt(indexEndPage, 10);
@@ -60,6 +63,9 @@ export default function PageNumberingTool() {
 
         {(phase === 'idle' || phase === 'processing') && (
           <section className="er__upload-section">
+            {chainedFrom && (
+              <p className="rp__chip">✓ Document carried over from {chainedFrom} — ready to go.</p>
+            )}
             <MainFileStep
               files={main.files}
               inputRef={main.inputRef}
@@ -83,6 +89,13 @@ export default function PageNumberingTool() {
             message="✓ Numbered PDF ready."
             onReset={reset}
             resetLabel="Number Another"
+            producedBy="Page Numbering"
+            nextSteps={[
+              { label: 'Add Annexures', to: '/tools/annexures' },
+              { label: 'Stamp Signatures', to: '/tools/signatures' },
+              { label: 'Add Bookmarks', to: '/tools/bookmarks' },
+              { label: 'Generate Index', to: '/tools/index-generator' },
+            ]}
           />
         )}
 
