@@ -17,6 +17,61 @@
   margin-bottom: 1rem;
 }
 
+/* Case templates */
+.ix__tpl-list {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border, #e0d9c8);
+  border-radius: 2px;
+}
+.ix__tpl {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid var(--border, #e0d9c8);
+  background: rgba(255, 255, 255, 0.45);
+}
+.ix__tpl:last-child {
+  border-bottom: none;
+}
+.ix__tpl-name {
+  flex: 1;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+.ix__tpl .ix__mini-btn {
+  margin-top: 0;
+}
+.ix__tpl-save {
+  align-self: stretch;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.ix__tpl-save input {
+  flex: 1;
+  min-width: 14rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border, #e0d9c8);
+  border-radius: 2px;
+  background: #fff;
+}
+.ix__tpl-save input:focus {
+  outline: none;
+  border-color: var(--gold, #b8962e);
+  box-shadow: 0 0 0 3px rgba(184, 150, 46, 0.12);
+}
+.ix__tpl-notice {
+  align-self: stretch;
+  font-size: 0.8rem;
+  color: var(--sage, #3a5a4a);
+  margin: 0;
+}
+
 /* Draft resume banner */
 .ix__draft {
   align-self: stretch;
