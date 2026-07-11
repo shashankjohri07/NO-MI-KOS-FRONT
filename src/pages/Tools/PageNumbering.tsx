@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
 import MainFileStep from '../ErrorReport/MainFileStep';
+import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
 import { useFileList } from '../ErrorReport/useFileList';
 import '../../styles/ErrorReport.css';
@@ -13,24 +14,10 @@ export default function PageNumberingTool() {
   const [phase, setPhase] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
   const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const elapsedRef = useRef<number | null>(null);
 
   useEffect(() => {
     documentApi.warmUp();
   }, []);
-
-  useEffect(() => {
-    if (phase !== 'processing') {
-      setElapsedSeconds(0);
-      if (elapsedRef.current) window.clearInterval(elapsedRef.current);
-      return;
-    }
-    elapsedRef.current = window.setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
-    return () => {
-      if (elapsedRef.current) window.clearInterval(elapsedRef.current);
-    };
-  }, [phase]);
 
   const safeIndexEnd = () => {
     const n = Number.parseInt(indexEndPage, 10);
@@ -85,18 +72,7 @@ export default function PageNumberingTool() {
               isProcessing={phase === 'processing'}
             />
 
-            {phase === 'processing' && (
-              <div className="er__processing">
-                <div className="er__spinner" />
-                <p className="er__processing-text">Processing…</p>
-                <p className="er__processing-hint">
-                  {elapsedSeconds < 60
-                    ? `${elapsedSeconds}s elapsed`
-                    : `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s elapsed`}
-                  {elapsedSeconds > 30 && ' — backend may be waking up, hang tight'}
-                </p>
-              </div>
-            )}
+            {phase === 'processing' && <ProcessingPanel label="Stamping page numbers" />}
           </section>
         )}
 
