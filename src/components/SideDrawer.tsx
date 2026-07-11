@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useProfile } from '../context/ProfileContext';
 import '../styles/SideDrawer.css';
 
 interface SideDrawerProps {
@@ -11,6 +12,7 @@ interface SideDrawerProps {
 export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
   const navigate = useNavigate();
   const { user, isAdmin, logout } = useAuth();
+  const { profile, openEditor } = useProfile();
 
   useEffect(() => {
     if (isOpen) {
@@ -33,6 +35,8 @@ export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
     navigate('/login');
   };
 
+  const initial = (profile?.username || user?.email || '?')[0]?.toUpperCase();
+
   return (
     <>
       <div
@@ -50,6 +54,24 @@ export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
         <div className="side-drawer__content">
           {user ? (
             <>
+              {/* Profile header — avatar + name, click to edit. */}
+              <button className="side-drawer__profile" onClick={() => { onClose(); openEditor(); }}>
+                <span className="side-drawer__avatar">
+                  {profile?.avatar ? (
+                    <img src={profile.avatar} alt="" className="side-drawer__avatar-img" />
+                  ) : (
+                    <span className="side-drawer__avatar-letter">{initial}</span>
+                  )}
+                </span>
+                <span className="side-drawer__profile-text">
+                  <span className="side-drawer__profile-name">
+                    {profile?.username || 'Set up your profile'}
+                  </span>
+                  <span className="side-drawer__profile-email">{user.email}</span>
+                </span>
+                <span className="side-drawer__profile-edit">✎</span>
+              </button>
+
               {/* Admin-only workspace switch — normal users never see this. */}
               {isAdmin && (
                 <button
@@ -59,14 +81,8 @@ export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                   ◆ Admin Workspace
                 </button>
               )}
-              <button className="side-drawer__btn" onClick={() => { onClose(); navigate('/detect-errors'); }}>
-                Detect Errors
-              </button>
               <button className="side-drawer__btn" onClick={() => { onClose(); navigate('/pricing'); }}>
                 Plans &amp; Pricing
-              </button>
-              <button className="side-drawer__btn side-drawer__btn--profile">
-                Profile
               </button>
               <button className="side-drawer__btn side-drawer__btn--logout" onClick={handleLogout}>
                 Logout

@@ -1,0 +1,210 @@
+/* Profile setup / edit modal — matches the site's paper & ink vocabulary. */
+
+.pfm__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 26, 26, 0.45);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  animation: pfmFade 0.2s ease;
+}
+
+@keyframes pfmFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pfm {
+  background: var(--paper, #f4f1ea);
+  border: 1px solid #e8e2d4;
+  border-radius: 16px;
+  padding: 2rem 2.25rem;
+  width: 100%;
+  max-width: 420px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  animation: pfmUp 0.25s ease;
+}
+
+@keyframes pfmUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pfm__close {
+  position: absolute;
+  top: 0.8rem;
+  right: 1rem;
+  border: none;
+  background: transparent;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--muted, #777);
+  cursor: pointer;
+}
+.pfm__close:hover { color: var(--ink, #1a1a1a); }
+
+.pfm__title {
+  font-family: var(--serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ink, #1a1a1a);
+  margin: 0 0 0.4rem;
+}
+
+.pfm__subtitle {
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  color: var(--muted, #777);
+  margin: 0 0 1.4rem;
+  line-height: 1.5;
+}
+
+/* --- avatar picker --- */
+.pfm__avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+
+.pfm__avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 2px solid var(--gold, #b8962e);
+  background: #fff;
+  cursor: pointer;
+  position: relative;
+  overflow: visible;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.pfm__avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.pfm__avatar-letter {
+  font-family: var(--serif);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--gold, #b8962e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.pfm__avatar-edit {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--ink, #1a1a1a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  border: 2px solid var(--paper, #f4f1ea);
+}
+
+.pfm__avatar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: flex-start;
+}
+
+.pfm__link {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gold, #b8962e);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.pfm__link:hover { text-decoration: underline; }
+.pfm__link--muted { color: var(--muted, #999); font-weight: 400; }
+
+.pfm__file { display: none; }
+
+/* --- form --- */
+.pfm__label {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink, #1a1a1a);
+  margin: 0 0 0.35rem;
+}
+
+.pfm__input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #d6d0c2;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: var(--ink, #1a1a1a);
+}
+.pfm__input:focus {
+  outline: none;
+  border-color: var(--ink, #1a1a1a);
+}
+
+.pfm__hint {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  color: var(--muted, #999);
+  margin: 0.4rem 0 0;
+}
+
+.pfm__error {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: #a23030;
+  background: #fdf0ef;
+  border: 1px solid #efc6c2;
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  margin: 1rem 0 0;
+}
+
+.pfm__actions {
+  display: flex;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+}
+
+.pfm__btn {
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  padding: 0.65rem 1.3rem;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--ink, #1a1a1a);
+  transition: opacity 0.15s ease;
+}
+.pfm__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pfm__btn--primary { background: var(--ink, #1a1a1a); color: #fff; }
+.pfm__btn--ghost {
+  background: transparent;
+  color: var(--muted, #777);
+  border-color: #d6d0c2;
+}
+.pfm__btn--ghost:hover:not(:disabled) { color: var(--ink, #1a1a1a); }
