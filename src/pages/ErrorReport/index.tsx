@@ -1,51 +1,32 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
+import { gateTool } from '../../services/billingApi';
+import { friendlyError } from '../../services/friendlyError';
+import { countTotalPages } from '../../services/pdfInfo';
 import Breadcrumb, { type BreadcrumbStep } from '../../components/Breadcrumb';
+import PlanBanner from '../../components/PlanBanner';
+import ToolNote from '../../components/ToolNote';
 import '../../styles/ErrorReport.css';
 import MainFileStep from './MainFileStep';
 import AnnexPickStep from './AnnexPickStep';
 import SigPickStep from './SigPickStep';
 import SpecialPageStep from './SpecialPageStep';
+import { parsePageSpec } from './pageSpec';
 import { useFileList } from './useFileList';
 
-// Workflow states. Four optional passes — main only, +annexures, +signatures,
-// +special-page signatures.
-type Step =
-  | 'pick-main'
-  | 'processing'
-  | 'annex-ask'
-  | 'pick-annex'
-  | 'sig-ask'
-  | 'pick-sig'
-  | 'special-ask'
-  | 'pick-special'
-  | 'done'
-  | 'error';
+/**
+ * Document Prep — cart-style wizard. Every step only COLLECTS input
+ * (nothing processes in between); the Review step shows the full order
+ * and one click runs a single processing pass and downloads the result.
+ * Skipping a step simply moves forward — earlier inputs are never lost.
+ */
+type Step = 'main' | 'annex' | 'sigs' | 'special' | 'review' | 'processing' | 'done' | 'error';
 
-// No hard cap on main volumes or annexures — court filings vary
-// widely in size, and the multer/nginx limits already gate the upload
-// at the transport layer.
+const STEP_ORDER: Step[] = ['main', 'annex', 'sigs', 'special', 'review'];
 
-// Which logical step (1/2/3/4) each internal state belongs to. `done` is the
-// terminal node past the last real step.
-function stepIndex(s: Step): 1 | 2 | 3 | 4 | 5 {
-  switch (s) {
-    case 'pick-main':
-    case 'processing':
-    case 'error':
-      return 1;
-    case 'annex-ask':
-    case 'pick-annex':
-      return 2;
-    case 'sig-ask':
-    case 'pick-sig':
-      return 3;
-    case 'special-ask':
-    case 'pick-special':
-      return 4;
-    case 'done':
-      return 5;
-  }
+function stepIndex(s: Step): number {
+  const i = STEP_ORDER.indexOf(s);
+  return i === -1 ? STEP_ORDER.length - 1 : i; // processing/done/error → review slot
 }
 
 export default function ErrorReport() {
@@ -54,23 +35,16 @@ export default function ErrorReport() {
 
   const [clientSig, setClientSig] = useState<File | null>(null);
   const [advocateSig, setAdvocateSig] = useState<File | null>(null);
-  // Optional comma+range spec ("1, 3-5, 8") of MAIN pages to sign in the
-  // Special Pages step. Empty string = no special-page signing.
   const [signPages, setSignPages] = useState<string>('');
-  // Signature images dedicated to the special pages — independent of the
-  // annexure signatures above.
   const [specialClientSig, setSpecialClientSig] = useState<File | null>(null);
   const [specialAdvocateSig, setSpecialAdvocateSig] = useState<File | null>(null);
   const [indexEndPage, setIndexEndPage] = useState<string>('');
-  const [step, setStep] = useState<Step>('pick-main');
+  const [step, setStep] = useState<Step>('main');
+  const [furthest, setFurthest] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  // Highest step the user has progressed past. Used by the breadcrumb to mark
-  // earlier nodes as "done" even after the user navigates back via the crumb.
-  const [furthestStep, setFurthestStep] = useState<1 | 2 | 3 | 4 | 5>(1);
-
-  const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
-  const [pendingFilename, setPendingFilename] = useState<string>('');
+  // Real page count of the main volumes (null until parsed / unparseable).
+  const [mainPages, setMainPages] = useState<number | null>(null);
 
   const clientSigInputRef = useRef<HTMLInputElement>(null);
   const advocateSigInputRef = useRef<HTMLInputElement>(null);
@@ -90,22 +64,58 @@ export default function ErrorReport() {
     documentApi.warmUp();
   }, []);
 
-  const triggerDownload = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  // Count the main document's real pages whenever the file list changes so
+  // page inputs can be capped at the actual document length.
+  useEffect(() => {
+    let cancelled = false;
+    if (main.files.length === 0) {
+      setMainPages(null);
+      return;
+    }
+    countTotalPages(main.files).then((n) => {
+      if (!cancelled) setMainPages(n);
+    });
+    return () => { cancelled = true; };
+  }, [main.files]);
 
   const safeIndexEnd = () => {
     const n = Number.parseInt(indexEndPage, 10);
-    return Number.isFinite(n) && n >= 0 ? n : 0;
+    if (!Number.isFinite(n) || n < 0) return 0;
+    // Never beyond the document itself.
+    return mainPages !== null ? Math.min(n, mainPages) : n;
   };
 
-  const bumpFurthest = (to: 2 | 3 | 4 | 5) => {
-    setFurthestStep((curr) => (to > curr ? to : curr));
+  // Highest stamped page number that can exist = real pages minus the
+  // unnumbered index pages. Used to validate the special-pages spec.
+  const maxStampedPage = mainPages !== null ? mainPages - safeIndexEnd() : null;
+
+  const signPagesCheck = useMemo(() => {
+    const trimmed = signPages.trim();
+    if (!trimmed) return { kind: 'empty' as const };
+    try {
+      const set = parsePageSpec(trimmed);
+      if (set.size === 0) return { kind: 'empty' as const };
+      const top = Math.max(...set);
+      if (maxStampedPage !== null && top > maxStampedPage) {
+        return {
+          kind: 'error' as const,
+          message: `Page ${top} doesn't exist — the document only has ${maxStampedPage} numbered page${maxStampedPage === 1 ? '' : 's'}.`,
+        };
+      }
+      return { kind: 'ok' as const, count: set.size };
+    } catch (e) {
+      return { kind: 'error' as const, message: e instanceof Error ? e.message : 'Invalid format' };
+    }
+  }, [signPages, maxStampedPage]);
+
+  const goTo = (s: Step) => {
+    setStep(s);
+    setFurthest((f) => Math.max(f, stepIndex(s)));
+  };
+
+  const next = () => {
+    const i = stepIndex(step);
+    if (i < STEP_ORDER.length - 1) goTo(STEP_ORDER[i + 1]);
   };
 
   const handleReset = () => {
@@ -117,179 +127,77 @@ export default function ErrorReport() {
     setSpecialClientSig(null);
     setSpecialAdvocateSig(null);
     setIndexEndPage('');
-    setStep('pick-main');
+    setStep('main');
+    setFurthest(0);
     setErrorMsg('');
-    setPendingBlob(null);
-    setPendingFilename('');
-    setFurthestStep(1);
+    setMainPages(null);
     if (clientSigInputRef.current) clientSigInputRef.current.value = '';
     if (advocateSigInputRef.current) advocateSigInputRef.current.value = '';
     if (specialClientSigInputRef.current) specialClientSigInputRef.current.value = '';
     if (specialAdvocateSigInputRef.current) specialAdvocateSigInputRef.current.value = '';
   };
 
-  const downloadAndFinish = async () => {
-    if (pendingBlob) {
-      triggerDownload(pendingBlob, pendingFilename);
-      trackTool('document-prep');
-      handleReset();
-      return;
-    }
-    // Page numbering was skipped — process the accumulated files now.
-    if (main.files.length === 0) { handleReset(); return; }
-    setStep('processing');
-    try {
-      const { blob, filename } = await documentApi.writePagination(
-        main.files,
-        safeIndexEnd(),
-        annex.files.length > 0 ? annex.files : undefined,
-      );
-      triggerDownload(blob, filename);
-      trackTool('document-prep');
-      handleReset();
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
-      setStep('error');
-    }
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const skipPageNumbering = () => {
-    bumpFurthest(2);
-    setStep('annex-ask');
-  };
-
-  // Skip annexures from pick-annex: download the numbered blob and stop.
-  // Cancel from pick-annex: same — don't nuke the numbered work the user already did.
-  const skipAnnexures = () => downloadAndFinish();
-
-  // Skip signatures from pick-sig: keep the annexed blob, proceed to special-ask.
-  const skipSignatures = () => {
-    bumpFurthest(4);
-    setStep('special-ask');
-  };
-
-  const jumpToStep = (i: number) => {
-    if (i === 0) setStep('pick-main');
-    else if (i === 1) setStep('pick-annex');
-    else if (i === 2) setStep('pick-sig');
-    else if (i === 3) setStep('special-ask');
-  };
-
-  const submitMainOnly = async () => {
+  // The single processing pass — everything the user queued, in one request.
+  const processAll = async () => {
     if (main.files.length === 0) return;
+    if (signPages.trim() && signPagesCheck.kind === 'error') return;
     setErrorMsg('');
     setStep('processing');
     try {
-      const { blob, filename } = await documentApi.writePagination(main.files, safeIndexEnd());
-      setPendingBlob(blob);
-      setPendingFilename(filename);
-      bumpFurthest(2);
-      setStep('annex-ask');
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
-      setStep('error');
-    }
-  };
-
-  const submitWithAnnexures = async () => {
-    if (main.files.length === 0 || annex.files.length === 0) return;
-    setErrorMsg('');
-    setStep('processing');
-    try {
+      const block = await gateTool('document-prep');
+      if (block) {
+        setErrorMsg(block);
+        setStep('error');
+        return;
+      }
+      const useSpecial = signPages.trim() && (specialClientSig || specialAdvocateSig);
       const { blob, filename } = await documentApi.writePagination(
         main.files,
         safeIndexEnd(),
-        annex.files
-      );
-      setPendingBlob(blob);
-      setPendingFilename(filename);
-      bumpFurthest(3);
-      setStep('sig-ask');
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
-      setStep('error');
-    }
-  };
-
-  const submitWithSignatures = async () => {
-    if (main.files.length === 0 || annex.files.length === 0) return;
-    if (!clientSig && !advocateSig) return;
-    setErrorMsg('');
-    setStep('processing');
-    try {
-      const { blob, filename } = await documentApi.writePagination(
-        main.files,
-        safeIndexEnd(),
-        annex.files,
-        { client: clientSig, advocate: advocateSig }
-      );
-      // Hold the annexure-signed PDF; the user may still add special pages.
-      setPendingBlob(blob);
-      setPendingFilename(filename);
-      bumpFurthest(4);
-      setStep('special-ask');
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
-      setStep('error');
-    }
-  };
-
-  const submitWithSpecial = async () => {
-    if (main.files.length === 0 || annex.files.length === 0) return;
-    if (!specialClientSig && !specialAdvocateSig) return;
-    setErrorMsg('');
-    setStep('processing');
-    try {
-      const { blob, filename } = await documentApi.writePagination(
-        main.files,
-        safeIndexEnd(),
-        annex.files,
-        { client: clientSig, advocate: advocateSig },
+        annex.files.length > 0 ? annex.files : [],
+        clientSig || advocateSig ? { client: clientSig, advocate: advocateSig } : undefined,
         undefined,
-        signPages,
-        { client: specialClientSig, advocate: specialAdvocateSig }
+        useSpecial ? signPages.trim() : undefined,
+        useSpecial ? { client: specialClientSig, advocate: specialAdvocateSig } : undefined,
       );
       triggerDownload(blob, filename);
       trackTool('document-prep');
-      setPendingBlob(null);
-      setPendingFilename('');
-      bumpFurthest(5);
       setStep('done');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to process document');
+      setErrorMsg(friendlyError(err, 'Failed to process document'));
       setStep('error');
     }
   };
 
   const current = stepIndex(step);
   const crumbs: BreadcrumbStep[] = [
-    {
-      label: 'Page Numbering',
-      active: current === 1,
-      done: furthestStep > 1 && current !== 1,
-      reachable: true,
-    },
-    {
-      label: 'Annexures',
-      active: current === 2,
-      done: furthestStep > 2 && current !== 2,
-      reachable: main.files.length > 0,
-    },
-    {
-      label: 'Signatures',
-      active: current === 3,
-      done: furthestStep > 3 && current !== 3,
-      reachable: main.files.length > 0 && annex.files.length > 0,
-    },
-    {
-      label: 'Special Pages',
-      active: current === 4,
-      done: furthestStep > 4 && current !== 4,
-      // Only reachable once the user has passed the Signatures step (there is
-      // a pending PDF to add special-page signatures onto).
-      reachable: furthestStep >= 4,
-    },
+    { label: 'Pages', active: step === 'main', done: furthest > 0 && step !== 'main', reachable: true },
+    { label: 'Annexures', active: step === 'annex', done: furthest > 1 && step !== 'annex', reachable: main.files.length > 0 },
+    { label: 'Signatures', active: step === 'sigs', done: furthest > 2 && step !== 'sigs', reachable: main.files.length > 0 },
+    { label: 'Special Pages', active: step === 'special', done: furthest > 3 && step !== 'special', reachable: main.files.length > 0 },
+    { label: 'Review', active: current === 4, done: step === 'done', reachable: main.files.length > 0 },
   ];
+
+  const jumpToStep = (i: number) => {
+    if (step === 'processing') return;
+    if (i === 0) setStep('main');
+    else if (main.files.length > 0) setStep(STEP_ORDER[i]);
+  };
+
+  // ── Review summary rows ──
+  const sigSummary = [clientSig && 'client', advocateSig && 'advocate'].filter(Boolean).join(' + ');
+  const specialSigSummary = [specialClientSig && 'client', specialAdvocateSig && 'advocate']
+    .filter(Boolean).join(' + ');
+  const specialActive = Boolean(signPages.trim() && (specialClientSig || specialAdvocateSig));
 
   return (
     <div className="er">
@@ -297,15 +205,22 @@ export default function ErrorReport() {
         <header className="er__header">
           <h1 className="er__title">Document Prep</h1>
           <p className="er__subtitle">
-            Four-stage filing prep: number pages, merge annexures, stamp annexure signatures, then
-            optionally sign specific main pages. Skip what you don&apos;t need — the breadcrumb above
-            lets you jump between stages.
+            Queue everything your filing needs — page numbers, annexures, signatures, special
+            pages — then process it all in one go at the Review step.
           </p>
         </header>
 
+        <PlanBanner />
+
+        <ToolNote>
+          Nothing is processed until you hit <strong>Process &amp; Download</strong> on the Review
+          step — you can move between steps freely, skip what you don&apos;t need, and change your
+          inputs any time before that. Your files are processed in memory and never stored.
+        </ToolNote>
+
         <Breadcrumb steps={crumbs} onJump={jumpToStep} />
 
-        {(step === 'pick-main' || step === 'processing') && (
+        {step === 'main' && (
           <section className="er__upload-section">
             <MainFileStep
               files={main.files}
@@ -315,15 +230,182 @@ export default function ErrorReport() {
               onRemove={main.remove}
               indexEndPage={indexEndPage}
               setIndexEndPage={setIndexEndPage}
-              onSubmit={submitMainOnly}
-              isProcessing={step === 'processing'}
-              onSkip={skipPageNumbering}
+              onSubmit={next}
+              isProcessing={false}
+              hideSubmit
+              maxPages={mainPages}
             />
+            {main.files.length > 0 && (
+              <div className="er__annex-prompt-actions">
+                <button type="button" className="er__btn er__btn--primary" onClick={next}>
+                  Next: Annexures →
+                </button>
+                <button type="button" className="er__btn er__btn--outline" onClick={() => goTo('review')}>
+                  Skip to Review →
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {step === 'annex' && (
+          <section className="er__upload-section">
+            <p className="er__annex-prompt-hint">
+              Each annexure file becomes one annexure — <em>Annexure A-1</em>, <em>A-2</em>, … stamped
+              top-centre of its first page, appended after the main document with continuous
+              numbering. Optional: skip if you have none.
+            </p>
+            <AnnexPickStep
+              files={annex.files}
+              inputRef={annex.inputRef}
+              onAdd={annex.add}
+              onMove={annex.move}
+              onRemove={annex.remove}
+              onSubmit={next}
+              onCancel={next}
+              hideSubmit
+              hideCancel
+            />
+            <div className="er__annex-prompt-actions">
+              <button type="button" className="er__btn er__btn--primary" onClick={next}>
+                {annex.files.length > 0 ? 'Next: Signatures →' : 'Skip annexures →'}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {step === 'sigs' && (
+          <section className="er__upload-section">
+            <p className="er__annex-prompt-hint">
+              These signatures are stamped in the footer of <strong>every annexure page</strong> —
+              client left, advocate right. Content on the page is detected automatically and never
+              covered. Optional: skip if not needed.
+            </p>
+            <SigPickStep
+              clientSig={clientSig}
+              advocateSig={advocateSig}
+              clientInputRef={clientSigInputRef}
+              advocateInputRef={advocateSigInputRef}
+              onClientChange={setClientSig}
+              onAdvocateChange={setAdvocateSig}
+              onSubmit={next}
+              onCancel={next}
+              hideSubmit
+              hideCancel
+            />
+            <div className="er__annex-prompt-actions">
+              <button type="button" className="er__btn er__btn--primary" onClick={next}>
+                {clientSig || advocateSig ? 'Next: Special Pages →' : 'Skip signatures →'}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {step === 'special' && (
+          <section className="er__upload-section">
+            <p className="er__annex-prompt-hint">
+              Sign specific MAIN-document pages (vakalatnama, prayer page, affidavit…) with their
+              own signature images. Page numbers refer to the <strong>stamped numbers</strong> the
+              document will get{maxStampedPage !== null ? ` (1–${maxStampedPage})` : ''}. Optional.
+            </p>
+            <SpecialPageStep
+              previewBlob={null}
+              signPages={signPages}
+              onSignPagesChange={setSignPages}
+              clientSig={specialClientSig}
+              advocateSig={specialAdvocateSig}
+              clientInputRef={specialClientSigInputRef}
+              advocateInputRef={specialAdvocateSigInputRef}
+              onClientChange={setSpecialClientSig}
+              onAdvocateChange={setSpecialAdvocateSig}
+              onSubmit={next}
+              onCancel={next}
+              hideActions
+              maxPage={maxStampedPage}
+            />
+            <div className="er__annex-prompt-actions">
+              <button
+                type="button"
+                className="er__btn er__btn--primary"
+                onClick={next}
+                disabled={Boolean(signPages.trim()) && signPagesCheck.kind === 'error'}
+              >
+                {specialActive ? 'Next: Review →' : 'Skip special pages →'}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {(step === 'review' || step === 'processing') && (
+          <section className="er__upload-section">
+            <h2 className="er__section-heading">Review your order</h2>
+            <ul className="er__cart">
+              <li className="er__cart-row">
+                <span className="er__cart-what">📄 Main document</span>
+                <span className="er__cart-detail">
+                  {main.files.length} volume{main.files.length === 1 ? '' : 's'}
+                  {mainPages !== null && ` · ${mainPages} pages`}
+                  {safeIndexEnd() > 0
+                    ? ` · numbering starts after index page ${safeIndexEnd()}`
+                    : ' · numbered from page 1'}
+                </span>
+                <button type="button" className="er__cart-edit" onClick={() => setStep('main')}
+                        disabled={step === 'processing'}>Edit</button>
+              </li>
+              <li className={`er__cart-row ${annex.files.length === 0 ? 'er__cart-row--skip' : ''}`}>
+                <span className="er__cart-what">📎 Annexures</span>
+                <span className="er__cart-detail">
+                  {annex.files.length > 0
+                    ? `${annex.files.length} file${annex.files.length === 1 ? '' : 's'} → A-1…A-${annex.files.length}`
+                    : 'skipped'}
+                </span>
+                <button type="button" className="er__cart-edit" onClick={() => setStep('annex')}
+                        disabled={step === 'processing'}>Edit</button>
+              </li>
+              <li className={`er__cart-row ${!sigSummary ? 'er__cart-row--skip' : ''}`}>
+                <span className="er__cart-what">✍️ Annexure signatures</span>
+                <span className="er__cart-detail">
+                  {sigSummary ? `${sigSummary} — on every annexure page` : 'skipped'}
+                </span>
+                <button type="button" className="er__cart-edit" onClick={() => setStep('sigs')}
+                        disabled={step === 'processing'}>Edit</button>
+              </li>
+              <li className={`er__cart-row ${!specialActive ? 'er__cart-row--skip' : ''}`}>
+                <span className="er__cart-what">📝 Special pages</span>
+                <span className="er__cart-detail">
+                  {specialActive
+                    ? `${specialSigSummary} on pages ${signPages.trim()}`
+                    : 'skipped'}
+                </span>
+                <button type="button" className="er__cart-edit" onClick={() => setStep('special')}
+                        disabled={step === 'processing'}>Edit</button>
+              </li>
+            </ul>
+
+            {signPagesCheck.kind === 'error' && specialActive && (
+              <p className="er__sig-extra-error">⚠ {signPagesCheck.message}</p>
+            )}
+
+            {step === 'review' && (
+              <div className="er__annex-prompt-actions">
+                <button
+                  type="button"
+                  className="er__btn er__btn--primary"
+                  onClick={processAll}
+                  disabled={main.files.length === 0 || (specialActive && signPagesCheck.kind === 'error')}
+                >
+                  Process &amp; Download
+                </button>
+                <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
+                  Start Over
+                </button>
+              </div>
+            )}
 
             {step === 'processing' && (
               <div className="er__processing">
                 <div className="er__spinner" />
-                <p className="er__processing-text">Processing…</p>
+                <p className="er__processing-text">Processing your filing…</p>
                 <p className="er__processing-hint">
                   {elapsedSeconds < 60
                     ? `${elapsedSeconds}s elapsed`
@@ -335,164 +417,14 @@ export default function ErrorReport() {
           </section>
         )}
 
-        {step === 'annex-ask' && (
-          <section className="er__upload-section">
-            <div className="er__annex-prompt">
-              <p className="er__annex-prompt-title">
-                ✓ Numbered PDF is ready. Would you like to merge annexures as well?
-              </p>
-              <p className="er__annex-prompt-hint">
-                Each annexure file you upload becomes one annexure: <em>Annexure A-1</em>,{' '}
-                <em>Annexure A-2</em>, etc., stamped on its first page. They will be appended to
-                the current document and pagination continues across them.
-              </p>
-              <div className="er__annex-prompt-actions">
-                <button
-                  type="button"
-                  className="er__btn er__btn--primary"
-                  onClick={() => setStep('pick-annex')}
-                >
-                  Yes, upload annexures
-                </button>
-                <button
-                  type="button"
-                  className="er__btn er__btn--outline"
-                  onClick={downloadAndFinish}
-                >
-                  No — download &amp; done
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {step === 'pick-annex' && (
-          <section className="er__upload-section">
-            <AnnexPickStep
-              files={annex.files}
-              inputRef={annex.inputRef}
-              onAdd={annex.add}
-              onMove={annex.move}
-              onRemove={annex.remove}
-              onSubmit={submitWithAnnexures}
-              onCancel={skipAnnexures}
-              onSkip={skipAnnexures}
-            />
-          </section>
-        )}
-
-        {step === 'sig-ask' && (
-          <section className="er__upload-section">
-            <div className="er__annex-prompt">
-              <p className="er__annex-prompt-title">
-                ✓ Annexure-merged PDF is ready. Would you like to integrate signatures as well?
-              </p>
-              <p className="er__annex-prompt-hint">
-                If yes, upload PNG/JPG files of the client and advocate signatures. They&apos;ll
-                be stamped in the footer of every annexure page — client on the left, advocate on
-                the right. Existing text on the page is detected; signatures are nudged up
-                automatically so nothing visible gets covered.
-              </p>
-              <div className="er__annex-prompt-actions">
-                <button
-                  type="button"
-                  className="er__btn er__btn--primary"
-                  onClick={() => setStep('pick-sig')}
-                >
-                  Yes, upload signatures
-                </button>
-                <button
-                  type="button"
-                  className="er__btn er__btn--outline"
-                  onClick={() => {
-                    bumpFurthest(4);
-                    setStep('special-ask');
-                  }}
-                >
-                  No, skip annexure signatures
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {step === 'pick-sig' && (
-          <section className="er__upload-section">
-            <SigPickStep
-              clientSig={clientSig}
-              advocateSig={advocateSig}
-              clientInputRef={clientSigInputRef}
-              advocateInputRef={advocateSigInputRef}
-              onClientChange={setClientSig}
-              onAdvocateChange={setAdvocateSig}
-              onSubmit={submitWithSignatures}
-              onCancel={skipSignatures}
-              onSkip={skipSignatures}
-            />
-          </section>
-        )}
-
-        {step === 'special-ask' && (
-          <section className="er__upload-section">
-            <div className="er__annex-prompt">
-              <p className="er__annex-prompt-title">
-                {clientSig || advocateSig
-                  ? '✓ Signatures applied to every annexure page. '
-                  : '✓ Annexures merged. '}
-                Do you also want to sign specific main-document pages?
-              </p>
-              <p className="er__annex-prompt-hint">
-                Use this for individual MAIN pages like the vakalatnama, prayer page, or affidavit.
-                You&apos;ll pick the page numbers and upload signature images <em>just for those
-                pages</em> — separate from the annexure signatures.
-              </p>
-              <div className="er__annex-prompt-actions">
-                <button
-                  type="button"
-                  className="er__btn er__btn--primary"
-                  onClick={() => setStep('pick-special')}
-                >
-                  Yes, sign special pages
-                </button>
-                <button
-                  type="button"
-                  className="er__btn er__btn--outline"
-                  onClick={downloadAndFinish}
-                >
-                  No — download &amp; done
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {step === 'pick-special' && (
-          <section className="er__upload-section">
-            <SpecialPageStep
-              previewBlob={pendingBlob}
-              signPages={signPages}
-              onSignPagesChange={setSignPages}
-              clientSig={specialClientSig}
-              advocateSig={specialAdvocateSig}
-              clientInputRef={specialClientSigInputRef}
-              advocateInputRef={specialAdvocateSigInputRef}
-              onClientChange={setSpecialClientSig}
-              onAdvocateChange={setSpecialAdvocateSig}
-              onSubmit={submitWithSpecial}
-              onCancel={downloadAndFinish}
-              onSkip={downloadAndFinish}
-            />
-          </section>
-        )}
-
         {step === 'done' && (
           <section className="er__upload-section">
             <div className="er__annex-prompt">
               <p className="er__annex-prompt-title">
-                ✓ Final PDF downloaded with {annex.files.length} annexure
-                {annex.files.length === 1 ? '' : 's'}
-                {clientSig || advocateSig ? ' + annexure signatures' : ''}
-                {specialClientSig || specialAdvocateSig ? ' + special-page signatures' : ''}.
+                ✓ Final PDF downloaded — {main.files.length} volume{main.files.length === 1 ? '' : 's'}
+                {annex.files.length > 0 && `, ${annex.files.length} annexure${annex.files.length === 1 ? '' : 's'}`}
+                {sigSummary && ', annexure signatures'}
+                {specialActive && ', special-page signatures'}.
               </p>
               <button type="button" className="er__btn er__btn--primary" onClick={handleReset}>
                 Start Over
@@ -505,8 +437,11 @@ export default function ErrorReport() {
           <section className="er__upload-section">
             <div className="er__error-msg">
               <p>{errorMsg}</p>
+              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('review')}>
+                Back to Review
+              </button>
               <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
-                Try Again
+                Start Over
               </button>
             </div>
           </section>

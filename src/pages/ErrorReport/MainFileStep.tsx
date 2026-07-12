@@ -19,6 +19,9 @@ interface Props {
   hideSubmit?: boolean;
   /** When provided, shows a "Skip page numbering →" link below the submit. */
   onSkip?: () => void;
+  /** Real page count of the uploaded document(s) — caps the index input so
+   * the user can't type a page beyond the document. Null = unknown. */
+  maxPages?: number | null;
 }
 
 /**
@@ -40,7 +43,18 @@ export default function MainFileStep({
   maxFiles,
   hideSubmit = false,
   onSkip,
+  maxPages = null,
 }: Props) {
+  const clampIndexEnd = (v: string) => {
+    if (maxPages !== null && v !== '') {
+      const n = Number.parseInt(v, 10);
+      if (Number.isFinite(n) && n > maxPages) {
+        setIndexEndPage(String(maxPages));
+        return;
+      }
+    }
+    setIndexEndPage(v);
+  };
   return (
     <>
       <Dropzone
@@ -79,18 +93,20 @@ export default function MainFileStep({
             <span className="er__index-input-hint">
               {' '}
               — numbering begins on the next page (use 0 if there is no index)
+              {maxPages !== null && `. Your document has ${maxPages} page${maxPages === 1 ? '' : 's'}.`}
             </span>
           </label>
           <input
             id="er-index-end"
             type="number"
             min={0}
+            max={maxPages ?? undefined}
             step={1}
             inputMode="numeric"
             className="er__index-input-field"
             placeholder="e.g. 3"
             value={indexEndPage}
-            onChange={(e) => setIndexEndPage(e.target.value)}
+            onChange={(e) => clampIndexEnd(e.target.value)}
           />
         </div>
       )}

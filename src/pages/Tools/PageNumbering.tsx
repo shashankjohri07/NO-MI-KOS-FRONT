@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
 import { gateTool } from '../../services/billingApi';
+import { countTotalPages } from '../../services/pdfInfo';
 import PlanBanner from '../../components/PlanBanner';
+import ToolNote from '../../components/ToolNote';
 import MainFileStep from '../ErrorReport/MainFileStep';
 import ProcessingPanel from '../../components/ProcessingPanel';
 import ResultPreview from '../../components/ResultPreview';
@@ -18,16 +20,31 @@ export default function PageNumberingTool() {
   const [phase, setPhase] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
   const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [totalPages, setTotalPages] = useState<number | null>(null);
 
   useEffect(() => {
     documentApi.warmUp();
   }, []);
 
+  // Real page count so the index input can't exceed the document.
+  useEffect(() => {
+    let cancelled = false;
+    if (main.files.length === 0) {
+      setTotalPages(null);
+      return;
+    }
+    countTotalPages(main.files).then((n) => {
+      if (!cancelled) setTotalPages(n);
+    });
+    return () => { cancelled = true; };
+  }, [main.files]);
+
   const chainedFrom = useChainedIntake(main.add);
 
   const safeIndexEnd = () => {
     const n = Number.parseInt(indexEndPage, 10);
-    return Number.isFinite(n) && n >= 0 ? n : 0;
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return totalPages !== null ? Math.min(n, totalPages) : n;
   };
 
   const reset = () => {
@@ -72,6 +89,11 @@ export default function PageNumberingTool() {
 
         <PlanBanner />
 
+        <ToolNote>
+          Numbers are stamped <strong>top-right of every page</strong> after your chosen index
+          pages. Your original file stays untouched — you always download a new copy.
+        </ToolNote>
+
         {(phase === 'idle' || phase === 'processing') && (
           <section className="er__upload-section">
             {chainedFrom && (
@@ -87,6 +109,7 @@ export default function PageNumberingTool() {
               setIndexEndPage={setIndexEndPage}
               onSubmit={submit}
               isProcessing={phase === 'processing'}
+              maxPages={totalPages}
             />
 
             {phase === 'processing' && <ProcessingPanel label="Stamping page numbers" />}
