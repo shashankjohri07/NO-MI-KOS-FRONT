@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import '../styles/Hero.css';
 
 export default function Hero() {
+  const { user } = useAuth();
+
   return (
     <section className="hero">
       <div className="hero__left">
@@ -12,13 +15,30 @@ export default function Hero() {
           <em>First Time.</em>
         </h1>
 
+        <p className="hero__sub">
+          Page numbering, annexures, signatures, bookmarks — everything your filing needs,
+          processed in one pass. No more rejection slips.
+        </p>
+
         <div className="hero__actions">
-          <Link to="/login" className="btn btn--primary">
-            Login/Signup →
-          </Link>
-          <a href="#suite" className="btn btn--ghost">
-            Explore Products ↓
+          {user ? (
+            <Link to="/options" className="btn btn--primary">
+              Open Dashboard →
+            </Link>
+          ) : (
+            <Link to="/login" className="btn btn--primary">
+              Get Started Free →
+            </Link>
+          )}
+          <a href="#how-it-works" className="btn btn--ghost">
+            How it works ↓
           </a>
+        </div>
+
+        <div className="hero__trust">
+          <span className="hero__trust-item">✓ No signup needed to explore</span>
+          <span className="hero__trust-item">✓ Files never stored</span>
+          <span className="hero__trust-item">✓ Free tier available</span>
         </div>
       </div>
 
@@ -36,7 +56,6 @@ export default function Hero() {
             every month, every bench.
           </p>
         </div>
-
       </div>
     </section>
   );
