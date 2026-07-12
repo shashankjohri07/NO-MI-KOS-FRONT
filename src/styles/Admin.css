@@ -724,3 +724,12 @@
     grid-template-columns: 100px 1fr 36px 36px;
   }
 }
+
+/* Integrations card */
+.adm__field { margin-top: 0.75rem; }
+.adm__field-label { font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+.adm__field-hint { color: var(--text-muted, #888); font-size: 0.82rem; margin: 0.25rem 0 0.5rem; }
+.adm__inline-form { display: flex; gap: 0.5rem; align-items: center; }
+.adm__inline-form .adm__input { flex: 1; padding: 0.45rem 0.6rem; border: 1px solid var(--border, #ddd); border-radius: 6px; font-size: 0.9rem; }
+.adm__msg--ok { color: var(--success, #16a34a); font-size: 0.82rem; margin-top: 0.4rem; }
+.adm__msg--err { color: var(--danger, #dc2626); font-size: 0.82rem; margin-top: 0.4rem; }

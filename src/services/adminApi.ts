@@ -294,3 +294,14 @@ export async function fetchProductTags(): Promise<ProductTagMap> {
 export function subscribeForUpdates(email: string): void {
   client.post('/subscribe', { email }).catch(() => {});
 }
+
+/* ── Remove.bg integration ─────────────────────────────────────────────────── */
+
+export async function getRemoveBgStatus(): Promise<{ hasKey: boolean }> {
+  const r = await client.get('/admin/removebg');
+  return r.data;
+}
+
+export async function saveRemoveBgKey(apiKey: string): Promise<void> {
+  await client.put('/admin/removebg', { apiKey });
+}

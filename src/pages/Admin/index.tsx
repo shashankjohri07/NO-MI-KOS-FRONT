@@ -16,6 +16,8 @@ import {
   type BillingConfigView,
   type BillingPlan,
   type SubscriptionRow,
+  getRemoveBgStatus,
+  saveRemoveBgKey,
 } from '../../services/adminApi';
 import { PRODUCT_DEFS } from '../Products';
 import { BarChart, LineChart, DonutChart, MiniSparkline } from './Charts';
@@ -102,6 +104,8 @@ export default function Admin() {
         <EmailSettingsCard />
 
         <BillingCard />
+
+        <IntegrationsCard />
 
         <ManageAdmins admins={admins} self={who.email} onChange={refresh} />
 
@@ -1099,6 +1103,67 @@ function FeedbackList({ entries, onChange }: { entries: FeedbackEntry[]; onChang
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/* ── Integrations (remove.bg) ─────────────────────────────────────────────── */
+
+function IntegrationsCard() {
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [key, setKey] = useState('');
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getRemoveBgStatus().then((r) => setHasKey(r.hasKey)).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    if (!key.trim()) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await saveRemoveBgKey(key.trim());
+      setHasKey(true);
+      setKey('');
+      setMsg({ kind: 'ok', text: 'API key saved.' });
+    } catch {
+      setMsg({ kind: 'err', text: 'Could not save key.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="adm__card">
+      <h2 className="adm__card-title">Integrations</h2>
+      <div className="adm__field">
+        <label className="adm__field-label">
+          Remove.bg API Key
+          {hasKey !== null && (
+            <span className={`adm__status-badge adm__status-badge--${hasKey ? 'active' : 'inactive'}`}>
+              {hasKey ? 'Configured' : 'Not set'}
+            </span>
+          )}
+        </label>
+        <p className="adm__field-hint">
+          Used to remove signature image backgrounds before stamping. Get a key at remove.bg/api.
+        </p>
+        <div className="adm__inline-form">
+          <input
+            type="password"
+            className="adm__input"
+            placeholder={hasKey ? '••••••••  (replace)' : 'Paste your remove.bg API key'}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
+          <button className="adm__btn adm__btn--primary" disabled={busy || !key.trim()} onClick={save}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        {msg && <p className={msg.kind === 'ok' ? 'adm__msg--ok' : 'adm__msg--err'}>{msg.text}</p>}
+      </div>
     </section>
   );
 }
