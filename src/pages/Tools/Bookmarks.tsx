@@ -161,8 +161,10 @@ export default function BookmarksTool() {
 
         <ToolNote>
           Bookmarks are the <strong>clickable outline in the PDF sidebar</strong> — they don&apos;t
-          change how any page looks or prints. Uncheck or ✗ anything you don&apos;t want; nothing
-          is written until you hit Apply.
+          change how any page looks or prints. Headings detected with <strong>60 %+ confidence</strong>{' '}
+          are auto-selected; lower-confidence ones are shown unchecked so you can include them
+          manually if needed. Edit titles, adjust levels, or ✗ remove any entry — nothing is
+          written until you hit <strong>Apply</strong>.
         </ToolNote>
 
         {(phase === 'idle' || phase === 'detecting') && (

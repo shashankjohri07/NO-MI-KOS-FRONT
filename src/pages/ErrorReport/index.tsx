@@ -15,18 +15,31 @@ import { parsePageSpec } from './pageSpec';
 import { useFileList } from './useFileList';
 
 /**
- * Document Prep — cart-style wizard. Every step only COLLECTS input
- * (nothing processes in between); the Review step shows the full order
- * and one click runs a single processing pass and downloads the result.
- * Skipping a step simply moves forward — earlier inputs are never lost.
+ * Document Prep — 2-phase pipeline wizard.
+ *
+ * Phase 1: Pages + Annexures → merge & number on server → numbered PDF preview
+ * Phase 2: Signatures + Special Pages (user sees numbered PDF to pick pages) → final stamp
+ *
+ * The user MUST see the numbered document before choosing which pages to sign,
+ * because page numbers only exist after merging + numbering.
  */
-type Step = 'main' | 'annex' | 'sigs' | 'special' | 'review' | 'processing' | 'done' | 'error';
+type Step =
+  | 'main'        // collect main PDFs + index end page
+  | 'annex'       // collect annexure files
+  | 'merging'     // Phase 1 processing (merge + number)
+  | 'preview'     // show numbered PDF, ask if signatures needed
+  | 'sigs'        // collect annexure signatures
+  | 'special'     // collect special page signatures (user sees numbered PDF)
+  | 'review'      // final review before Phase 2
+  | 'processing'  // Phase 2 processing (stamp signatures)
+  | 'done'
+  | 'error';
 
-const STEP_ORDER: Step[] = ['main', 'annex', 'sigs', 'special', 'review'];
+const STEP_ORDER: Step[] = ['main', 'annex', 'merging', 'preview', 'sigs', 'special', 'review'];
 
 function stepIndex(s: Step): number {
   const i = STEP_ORDER.indexOf(s);
-  return i === -1 ? STEP_ORDER.length - 1 : i; // processing/done/error → review slot
+  return i === -1 ? STEP_ORDER.length - 1 : i;
 }
 
 export default function ErrorReport() {
@@ -43,29 +56,34 @@ export default function ErrorReport() {
   const [furthest, setFurthest] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  // Real page count of the main volumes (null until parsed / unparseable).
   const [mainPages, setMainPages] = useState<number | null>(null);
+
+  // Phase 1 result — the merged+numbered PDF (no signatures yet).
+  const [numberedBlob, setNumberedBlob] = useState<Blob | null>(null);
+  const [numberedFilename, setNumberedFilename] = useState('');
+  // Total pages in the numbered PDF (main + annexure pages combined).
+  const [numberedTotalPages, setNumberedTotalPages] = useState<number | null>(null);
 
   const clientSigInputRef = useRef<HTMLInputElement>(null);
   const advocateSigInputRef = useRef<HTMLInputElement>(null);
   const specialClientSigInputRef = useRef<HTMLInputElement>(null);
   const specialAdvocateSigInputRef = useRef<HTMLInputElement>(null);
 
+  const isBusy = step === 'merging' || step === 'processing';
+
   useEffect(() => {
-    if (step !== 'processing') {
+    if (!isBusy) {
       setElapsedSeconds(0);
       return;
     }
     const t = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
-  }, [step]);
+  }, [isBusy]);
 
   useEffect(() => {
     documentApi.warmUp();
   }, []);
 
-  // Count the main document's real pages whenever the file list changes so
-  // page inputs can be capped at the actual document length.
   useEffect(() => {
     let cancelled = false;
     if (main.files.length === 0) {
@@ -81,13 +99,13 @@ export default function ErrorReport() {
   const safeIndexEnd = () => {
     const n = Number.parseInt(indexEndPage, 10);
     if (!Number.isFinite(n) || n < 0) return 0;
-    // Never beyond the document itself.
     return mainPages !== null ? Math.min(n, mainPages) : n;
   };
 
-  // Highest stamped page number that can exist = real pages minus the
-  // unnumbered index pages. Used to validate the special-pages spec.
-  const maxStampedPage = mainPages !== null ? mainPages - safeIndexEnd() : null;
+  // maxStampedPage uses the NUMBERED PDF's total pages (after merge), not just main.
+  const maxStampedPage = numberedTotalPages !== null
+    ? numberedTotalPages - safeIndexEnd()
+    : (mainPages !== null ? mainPages - safeIndexEnd() : null);
 
   const signPagesCheck = useMemo(() => {
     const trimmed = signPages.trim();
@@ -113,11 +131,6 @@ export default function ErrorReport() {
     setFurthest((f) => Math.max(f, stepIndex(s)));
   };
 
-  const next = () => {
-    const i = stepIndex(step);
-    if (i < STEP_ORDER.length - 1) goTo(STEP_ORDER[i + 1]);
-  };
-
   const handleReset = () => {
     main.reset();
     annex.reset();
@@ -131,6 +144,9 @@ export default function ErrorReport() {
     setFurthest(0);
     setErrorMsg('');
     setMainPages(null);
+    setNumberedBlob(null);
+    setNumberedFilename('');
+    setNumberedTotalPages(null);
     if (clientSigInputRef.current) clientSigInputRef.current.value = '';
     if (advocateSigInputRef.current) advocateSigInputRef.current.value = '';
     if (specialClientSigInputRef.current) specialClientSigInputRef.current.value = '';
@@ -146,12 +162,11 @@ export default function ErrorReport() {
     URL.revokeObjectURL(url);
   };
 
-  // The single processing pass — everything the user queued, in one request.
-  const processAll = async () => {
+  // ── Phase 1: Merge + Number (no signatures) ──
+  const mergeAndNumber = async () => {
     if (main.files.length === 0) return;
-    if (signPages.trim() && signPagesCheck.kind === 'error') return;
     setErrorMsg('');
-    setStep('processing');
+    setStep('merging');
     try {
       const block = await gateTool('document-prep');
       if (block) {
@@ -159,7 +174,42 @@ export default function ErrorReport() {
         setStep('error');
         return;
       }
+      const { blob, filename } = await documentApi.writePagination(
+        main.files,
+        safeIndexEnd(),
+        annex.files.length > 0 ? annex.files : [],
+      );
+      setNumberedBlob(blob);
+      setNumberedFilename(filename);
+      // Count pages in the numbered result so special-page validation is accurate.
+      const file = new File([blob], filename, { type: 'application/pdf' });
+      const pages = await countTotalPages([file]);
+      setNumberedTotalPages(pages);
+      goTo('preview');
+    } catch (err: unknown) {
+      setErrorMsg(friendlyError(err, 'Failed to merge and number the document.'));
+      setStep('error');
+    }
+  };
+
+  // ── Phase 2: Stamp signatures onto the already-numbered PDF ──
+  const stampSignatures = async () => {
+    if (main.files.length === 0) return;
+    if (signPages.trim() && signPagesCheck.kind === 'error') return;
+    setErrorMsg('');
+    setStep('processing');
+    try {
       const useSpecial = signPages.trim() && (specialClientSig || specialAdvocateSig);
+      const hasSigs = clientSig || advocateSig || useSpecial;
+
+      if (!hasSigs) {
+        // No signatures at all — just download the numbered PDF from Phase 1.
+        if (numberedBlob) triggerDownload(numberedBlob, numberedFilename);
+        trackTool('document-prep');
+        setStep('done');
+        return;
+      }
+
       const { blob, filename } = await documentApi.writePagination(
         main.files,
         safeIndexEnd(),
@@ -173,31 +223,55 @@ export default function ErrorReport() {
       trackTool('document-prep');
       setStep('done');
     } catch (err: unknown) {
-      setErrorMsg(friendlyError(err, 'Failed to process document'));
+      setErrorMsg(friendlyError(err, 'Failed to stamp signatures.'));
       setStep('error');
     }
   };
 
-  const current = stepIndex(step);
+  // ── Breadcrumb ──
   const crumbs: BreadcrumbStep[] = [
     { label: 'Pages', active: step === 'main', done: furthest > 0 && step !== 'main', reachable: true },
     { label: 'Annexures', active: step === 'annex', done: furthest > 1 && step !== 'annex', reachable: main.files.length > 0 },
-    { label: 'Signatures', active: step === 'sigs', done: furthest > 2 && step !== 'sigs', reachable: main.files.length > 0 },
-    { label: 'Special Pages', active: step === 'special', done: furthest > 3 && step !== 'special', reachable: main.files.length > 0 },
-    { label: 'Review', active: current === 4, done: step === 'done', reachable: main.files.length > 0 },
+    { label: 'Preview', active: step === 'preview' || step === 'merging', done: furthest > 3 && step !== 'preview', reachable: !!numberedBlob },
+    { label: 'Signatures', active: step === 'sigs', done: furthest > 4 && step !== 'sigs', reachable: !!numberedBlob },
+    { label: 'Special Pages', active: step === 'special', done: furthest > 5 && step !== 'special', reachable: !!numberedBlob },
+    { label: 'Review', active: step === 'review' || step === 'processing', done: step === 'done', reachable: !!numberedBlob },
   ];
 
-  const jumpToStep = (i: number) => {
-    if (step === 'processing') return;
-    if (i === 0) setStep('main');
-    else if (main.files.length > 0) setStep(STEP_ORDER[i]);
+  const jumpToStep = (idx: number) => {
+    if (isBusy) return;
+    const targets: Step[] = ['main', 'annex', 'preview', 'sigs', 'special', 'review'];
+    const target = targets[idx];
+    if (!target) return;
+    // Can't jump past preview without having a numbered PDF.
+    if (idx >= 2 && !numberedBlob) return;
+    // Going back to pages/annexures invalidates the numbered PDF — warn or just allow.
+    if (idx <= 1 && numberedBlob) {
+      setNumberedBlob(null);
+      setNumberedFilename('');
+      setNumberedTotalPages(null);
+    }
+    setStep(target);
   };
 
-  // ── Review summary rows ──
+  // ── Summary helpers ──
   const sigSummary = [clientSig && 'client', advocateSig && 'advocate'].filter(Boolean).join(' + ');
   const specialSigSummary = [specialClientSig && 'client', specialAdvocateSig && 'advocate']
     .filter(Boolean).join(' + ');
   const specialActive = Boolean(signPages.trim() && (specialClientSig || specialAdvocateSig));
+  const hasSigs = !!(clientSig || advocateSig || specialActive);
+
+  // Preview URL for the numbered PDF blob.
+  const [previewUrl, setPreviewUrl] = useState('');
+  useEffect(() => {
+    if (!numberedBlob) {
+      setPreviewUrl('');
+      return;
+    }
+    const url = URL.createObjectURL(numberedBlob);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [numberedBlob]);
 
   return (
     <div className="er">
@@ -205,21 +279,21 @@ export default function ErrorReport() {
         <header className="er__header">
           <h1 className="er__title">Document Prep</h1>
           <p className="er__subtitle">
-            Queue everything your filing needs — page numbers, annexures, signatures, special
-            pages — then process it all in one go at the Review step.
+            Upload your documents, merge and number them, then add signatures where needed.
           </p>
         </header>
 
         <PlanBanner />
 
         <ToolNote>
-          Nothing is processed until you hit <strong>Process &amp; Download</strong> on the Review
-          step — you can move between steps freely, skip what you don&apos;t need, and change your
-          inputs any time before that. Your files are processed in memory and never stored.
+          <strong>Step 1:</strong> Upload pages &amp; annexures → we merge and number them.{' '}
+          <strong>Step 2:</strong> See the numbered PDF, then choose which pages to sign.
+          Your files are processed in memory and never stored.
         </ToolNote>
 
         <Breadcrumb steps={crumbs} onJump={jumpToStep} />
 
+        {/* ── Step 1: Main files ── */}
         {step === 'main' && (
           <section className="er__upload-section">
             <MainFileStep
@@ -230,24 +304,22 @@ export default function ErrorReport() {
               onRemove={main.remove}
               indexEndPage={indexEndPage}
               setIndexEndPage={setIndexEndPage}
-              onSubmit={next}
+              onSubmit={() => goTo('annex')}
               isProcessing={false}
               hideSubmit
               maxPages={mainPages}
             />
             {main.files.length > 0 && (
               <div className="er__annex-prompt-actions">
-                <button type="button" className="er__btn er__btn--primary" onClick={next}>
+                <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('annex')}>
                   Next: Annexures →
-                </button>
-                <button type="button" className="er__btn er__btn--outline" onClick={() => goTo('review')}>
-                  Skip to Review →
                 </button>
               </div>
             )}
           </section>
         )}
 
+        {/* ── Step 2: Annexures ── */}
         {step === 'annex' && (
           <section className="er__upload-section">
             <p className="er__annex-prompt-hint">
@@ -261,19 +333,80 @@ export default function ErrorReport() {
               onAdd={annex.add}
               onMove={annex.move}
               onRemove={annex.remove}
-              onSubmit={next}
-              onCancel={next}
+              onSubmit={mergeAndNumber}
+              onCancel={mergeAndNumber}
               hideSubmit
               hideCancel
             />
             <div className="er__annex-prompt-actions">
-              <button type="button" className="er__btn er__btn--primary" onClick={next}>
-                {annex.files.length > 0 ? 'Next: Signatures →' : 'Skip annexures →'}
+              <button type="button" className="er__btn er__btn--primary" onClick={mergeAndNumber}>
+                {annex.files.length > 0 ? 'Merge & Number →' : 'Skip annexures & Number →'}
+              </button>
+              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('main')}>
+                ← Back
               </button>
             </div>
           </section>
         )}
 
+        {/* ── Phase 1 processing: merging ── */}
+        {step === 'merging' && (
+          <section className="er__upload-section">
+            <div className="er__processing">
+              <div className="er__spinner" />
+              <p className="er__processing-text">Merging and numbering your document…</p>
+              <p className="er__processing-hint">
+                {elapsedSeconds < 60
+                  ? `${elapsedSeconds}s elapsed`
+                  : `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s elapsed`}
+                {elapsedSeconds > 30 && ' — backend may be waking up, hang tight'}
+              </p>
+            </div>
+          </section>
+        )}
+
+        {/* ── Preview: numbered PDF ── */}
+        {step === 'preview' && numberedBlob && (
+          <section className="er__upload-section">
+            <h2 className="er__section-heading">
+              Numbered document ready
+              {numberedTotalPages !== null && ` — ${numberedTotalPages} pages`}
+            </h2>
+            <p className="er__annex-prompt-hint">
+              Your document has been merged and numbered. Scroll through the preview below to see the
+              stamped page numbers (top-right). You can now add signatures, or download as-is.
+            </p>
+
+            {previewUrl && (
+              <div className="er__preview">
+                <iframe
+                  src={`${previewUrl}#toolbar=1&navpanes=0`}
+                  title="Numbered document preview"
+                  className="er__preview-frame"
+                />
+              </div>
+            )}
+
+            <div className="er__annex-prompt-actions">
+              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('sigs')}>
+                Add Signatures →
+              </button>
+              <button
+                type="button"
+                className="er__btn er__btn--outline"
+                onClick={() => {
+                  triggerDownload(numberedBlob, numberedFilename);
+                  trackTool('document-prep');
+                  setStep('done');
+                }}
+              >
+                Download without signatures
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ── Step 3: Annexure signatures ── */}
         {step === 'sigs' && (
           <section className="er__upload-section">
             <p className="er__annex-prompt-hint">
@@ -288,28 +421,32 @@ export default function ErrorReport() {
               advocateInputRef={advocateSigInputRef}
               onClientChange={setClientSig}
               onAdvocateChange={setAdvocateSig}
-              onSubmit={next}
-              onCancel={next}
+              onSubmit={() => goTo('special')}
+              onCancel={() => goTo('special')}
               hideSubmit
               hideCancel
             />
             <div className="er__annex-prompt-actions">
-              <button type="button" className="er__btn er__btn--primary" onClick={next}>
+              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('special')}>
                 {clientSig || advocateSig ? 'Next: Special Pages →' : 'Skip signatures →'}
+              </button>
+              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('preview')}>
+                ← Back to Preview
               </button>
             </div>
           </section>
         )}
 
+        {/* ── Step 4: Special pages (user sees numbered PDF) ── */}
         {step === 'special' && (
           <section className="er__upload-section">
             <p className="er__annex-prompt-hint">
-              Sign specific MAIN-document pages (vakalatnama, prayer page, affidavit…) with their
-              own signature images. Page numbers refer to the <strong>stamped numbers</strong> the
-              document will get{maxStampedPage !== null ? ` (1–${maxStampedPage})` : ''}. Optional.
+              Sign specific pages (vakalatnama, prayer page, affidavit…) with their own signature
+              images. Use the <strong>stamped page numbers</strong> from the preview
+              {maxStampedPage !== null ? ` (1–${maxStampedPage})` : ''}. Optional.
             </p>
             <SpecialPageStep
-              previewBlob={null}
+              previewBlob={numberedBlob}
               signPages={signPages}
               onSignPagesChange={setSignPages}
               clientSig={specialClientSig}
@@ -318,8 +455,8 @@ export default function ErrorReport() {
               advocateInputRef={specialAdvocateSigInputRef}
               onClientChange={setSpecialClientSig}
               onAdvocateChange={setSpecialAdvocateSig}
-              onSubmit={next}
-              onCancel={next}
+              onSubmit={() => goTo('review')}
+              onCancel={() => goTo('review')}
               hideActions
               maxPage={maxStampedPage}
             />
@@ -327,15 +464,19 @@ export default function ErrorReport() {
               <button
                 type="button"
                 className="er__btn er__btn--primary"
-                onClick={next}
+                onClick={() => goTo('review')}
                 disabled={Boolean(signPages.trim()) && signPagesCheck.kind === 'error'}
               >
                 {specialActive ? 'Next: Review →' : 'Skip special pages →'}
+              </button>
+              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('sigs')}>
+                ← Back
               </button>
             </div>
           </section>
         )}
 
+        {/* ── Review + Phase 2 processing ── */}
         {(step === 'review' || step === 'processing') && (
           <section className="er__upload-section">
             <h2 className="er__section-heading">Review your order</h2>
@@ -344,12 +485,12 @@ export default function ErrorReport() {
                 <span className="er__cart-what">📄 Main document</span>
                 <span className="er__cart-detail">
                   {main.files.length} volume{main.files.length === 1 ? '' : 's'}
-                  {mainPages !== null && ` · ${mainPages} pages`}
+                  {numberedTotalPages !== null && ` · ${numberedTotalPages} pages`}
                   {safeIndexEnd() > 0
                     ? ` · numbering starts after index page ${safeIndexEnd()}`
                     : ' · numbered from page 1'}
                 </span>
-                <button type="button" className="er__cart-edit" onClick={() => setStep('main')}
+                <button type="button" className="er__cart-edit" onClick={() => { setNumberedBlob(null); setStep('main'); }}
                         disabled={step === 'processing'}>Edit</button>
               </li>
               <li className={`er__cart-row ${annex.files.length === 0 ? 'er__cart-row--skip' : ''}`}>
@@ -359,8 +500,12 @@ export default function ErrorReport() {
                     ? `${annex.files.length} file${annex.files.length === 1 ? '' : 's'} → A-1…A-${annex.files.length}`
                     : 'skipped'}
                 </span>
-                <button type="button" className="er__cart-edit" onClick={() => setStep('annex')}
+                <button type="button" className="er__cart-edit" onClick={() => { setNumberedBlob(null); setStep('annex'); }}
                         disabled={step === 'processing'}>Edit</button>
+              </li>
+              <li className="er__cart-row er__cart-row--done">
+                <span className="er__cart-what">🔢 Merge &amp; Number</span>
+                <span className="er__cart-detail">✓ done</span>
               </li>
               <li className={`er__cart-row ${!sigSummary ? 'er__cart-row--skip' : ''}`}>
                 <span className="er__cart-what">✍️ Annexure signatures</span>
@@ -391,10 +536,10 @@ export default function ErrorReport() {
                 <button
                   type="button"
                   className="er__btn er__btn--primary"
-                  onClick={processAll}
-                  disabled={main.files.length === 0 || (specialActive && signPagesCheck.kind === 'error')}
+                  onClick={stampSignatures}
+                  disabled={specialActive && signPagesCheck.kind === 'error'}
                 >
-                  Process &amp; Download
+                  {hasSigs ? 'Stamp Signatures & Download' : 'Download'}
                 </button>
                 <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
                   Start Over
@@ -405,7 +550,7 @@ export default function ErrorReport() {
             {step === 'processing' && (
               <div className="er__processing">
                 <div className="er__spinner" />
-                <p className="er__processing-text">Processing your filing…</p>
+                <p className="er__processing-text">Stamping signatures…</p>
                 <p className="er__processing-hint">
                   {elapsedSeconds < 60
                     ? `${elapsedSeconds}s elapsed`
@@ -437,8 +582,8 @@ export default function ErrorReport() {
           <section className="er__upload-section">
             <div className="er__error-msg">
               <p>{errorMsg}</p>
-              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('review')}>
-                Back to Review
+              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep(numberedBlob ? 'review' : 'annex')}>
+                {numberedBlob ? 'Back to Review' : 'Back'}
               </button>
               <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
                 Start Over

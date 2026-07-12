@@ -547,6 +547,14 @@
   color: var(--muted, #999);
 }
 
+.er__cart-row--done {
+  background: rgba(58, 90, 74, 0.05);
+}
+.er__cart-row--done .er__cart-detail {
+  color: var(--sage, #3a5a4a);
+  font-weight: 500;
+}
+
 .er__cart-what {
   font-family: var(--sans, sans-serif);
   font-size: 0.9rem;
