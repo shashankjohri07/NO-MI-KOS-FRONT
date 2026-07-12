@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { documentApi, trackTool } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
 import { gateTool } from '../../services/billingApi';
+import { countTotalPages } from '../../services/pdfInfo';
 import PlanBanner from '../../components/PlanBanner';
+import ToolNote from '../../components/ToolNote';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import { useFileList } from '../ErrorReport/useFileList';
@@ -22,10 +24,24 @@ export default function SignaturesTool() {
   const [errorMsg, setErrorMsg] = useState('');
   const clientRef = useRef<HTMLInputElement>(null);
   const advocateRef = useRef<HTMLInputElement>(null);
+  const [totalPages, setTotalPages] = useState<number | null>(null);
 
   useEffect(() => {
     documentApi.warmUp();
   }, []);
+
+  // Real page count so "pages to sign" can't reference a page that isn't there.
+  useEffect(() => {
+    let cancelled = false;
+    if (doc.files.length === 0) {
+      setTotalPages(null);
+      return;
+    }
+    countTotalPages(doc.files).then((n) => {
+      if (!cancelled) setTotalPages(n);
+    });
+    return () => { cancelled = true; };
+  }, [doc.files]);
 
   const chainedFrom = useChainedIntake(doc.add);
 
@@ -35,11 +51,18 @@ export default function SignaturesTool() {
     try {
       const set = parsePageSpec(trimmed);
       if (set.size === 0) return { kind: 'empty' as const };
+      const top = Math.max(...set);
+      if (totalPages !== null && top > totalPages) {
+        return {
+          kind: 'error' as const,
+          message: `Page ${top} doesn't exist — your document only has ${totalPages} page${totalPages === 1 ? '' : 's'}.`,
+        };
+      }
       return { kind: 'ok' as const, label: formatPageSet(set), count: set.size };
     } catch (e) {
       return { kind: 'error' as const, message: e instanceof Error ? e.message : 'Invalid format' };
     }
-  }, [signPages]);
+  }, [signPages, totalPages]);
 
   const reset = () => {
     doc.reset();
@@ -98,6 +121,13 @@ export default function SignaturesTool() {
 
         <PlanBanner />
 
+        <ToolNote>
+          Signatures are placed <strong>without covering any content</strong> — the page is scanned
+          and the stamp lands in clear space (bottom footer, or top if the page is full). The image
+          background is removed automatically so only the ink shows. Landscape pages are signed
+          as-is, never rotated.
+        </ToolNote>
+
         {(phase === 'idle' || phase === 'processing') && (
           <>
             <section className="er__upload-section">
@@ -134,7 +164,9 @@ export default function SignaturesTool() {
                   autoComplete="off"
                   spellCheck={false}
                   className="er__sig-extra-input"
-                  placeholder="e.g. 1, 3-5, 8  — leave blank to sign all pages"
+                  placeholder={totalPages !== null
+                    ? `e.g. 1, 3-5 (document has ${totalPages} pages) — blank = all pages`
+                    : 'e.g. 1, 3-5, 8  — leave blank to sign all pages'}
                   value={signPages}
                   onChange={(e) => setSignPages(e.target.value)}
                 />

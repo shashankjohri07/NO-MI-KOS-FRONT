@@ -23,6 +23,12 @@ interface Props {
   /** When provided, shows a "Skip & Download →" button to download the pending
    * blob without running the special-pages pass. */
   onSkip?: () => void;
+  /** Hide the inline submit/skip/cancel — used when the parent (cart-style
+   * wizard) renders its own navigation. */
+  hideActions?: boolean;
+  /** Highest valid stamped page number, from the real document page count.
+   * Entries above this are flagged as errors. Null = unknown (no cap). */
+  maxPage?: number | null;
 }
 
 /**
@@ -49,6 +55,8 @@ export default function SpecialPageStep({
   onSubmit,
   onCancel,
   onSkip,
+  hideActions = false,
+  maxPage = null,
 }: Props) {
   // Object URL for the embedded PDF preview; created from the current blob and
   // revoked when it changes / the step unmounts to avoid leaking memory.
@@ -69,6 +77,13 @@ export default function SpecialPageStep({
     try {
       const set = parsePageSpec(trimmed);
       if (set.size === 0) return { kind: 'empty' as const };
+      const top = Math.max(...set);
+      if (maxPage !== null && top > maxPage) {
+        return {
+          kind: 'error' as const,
+          message: `Page ${top} doesn't exist — the document only has ${maxPage} numbered page${maxPage === 1 ? '' : 's'}.`,
+        };
+      }
       return { kind: 'ok' as const, label: formatPageSet(set), count: set.size };
     } catch (e) {
       return {
@@ -76,7 +91,7 @@ export default function SpecialPageStep({
         message: e instanceof Error ? e.message : 'Invalid format',
       };
     }
-  }, [signPages]);
+  }, [signPages, maxPage]);
 
   const hasSig = !!clientSig || !!advocateSig;
   const canSubmit = preview.kind === 'ok' && hasSig;
@@ -172,19 +187,21 @@ export default function SpecialPageStep({
         pages. These images are independent of the annexure signatures.
       </p>
 
-      {canSubmit && (
+      {!hideActions && canSubmit && (
         <button type="button" className="er__btn er__btn--primary" onClick={onSubmit}>
           Stamp Special Pages &amp; Finish
         </button>
       )}
-      {onSkip && (
+      {!hideActions && onSkip && (
         <button type="button" className="er__btn er__btn--outline" onClick={onSkip}>
           Skip & Download →
         </button>
       )}
-      <button type="button" className="er__btn er__btn--outline" onClick={onCancel}>
-        Cancel
-      </button>
+      {!hideActions && (
+        <button type="button" className="er__btn er__btn--outline" onClick={onCancel}>
+          Cancel
+        </button>
+      )}
     </>
   );
 }

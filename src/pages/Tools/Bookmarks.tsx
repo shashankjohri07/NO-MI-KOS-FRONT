@@ -2,7 +2,9 @@ import { useRef, useState, useEffect } from 'react';
 import { documentApi, trackTool, type BookmarkHeading } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
 import { gateTool } from '../../services/billingApi';
+import { countTotalPages } from '../../services/pdfInfo';
 import PlanBanner from '../../components/PlanBanner';
+import ToolNote from '../../components/ToolNote';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
@@ -29,11 +31,33 @@ export default function BookmarksTool() {
   const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(null);
   const [existingToc, setExistingToc] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [totalPages, setTotalPages] = useState<number | null>(null);
+  // Blob URL of the uploaded document for the side-by-side review preview.
+  const [previewUrl, setPreviewUrl] = useState('');
   const nextId = useRef(0);
 
   useEffect(() => {
     documentApi.warmUp();
   }, []);
+
+  // Page count (caps the Pg inputs) + preview URL for the review pane.
+  useEffect(() => {
+    if (doc.files.length === 0) {
+      setTotalPages(null);
+      setPreviewUrl('');
+      return;
+    }
+    let cancelled = false;
+    countTotalPages(doc.files).then((n) => {
+      if (!cancelled) setTotalPages(n);
+    });
+    const url = URL.createObjectURL(doc.files[0]);
+    setPreviewUrl(url);
+    return () => {
+      cancelled = true;
+      URL.revokeObjectURL(url);
+    };
+  }, [doc.files]);
 
   const chainedFrom = useChainedIntake(doc.add);
 
@@ -135,6 +159,12 @@ export default function BookmarksTool() {
 
         <PlanBanner />
 
+        <ToolNote>
+          Bookmarks are the <strong>clickable outline in the PDF sidebar</strong> — they don&apos;t
+          change how any page looks or prints. Uncheck or ✗ anything you don&apos;t want; nothing
+          is written until you hit Apply.
+        </ToolNote>
+
         {(phase === 'idle' || phase === 'detecting') && (
           <>
             <section className="er__upload-section">
@@ -187,6 +217,7 @@ export default function BookmarksTool() {
               </p>
             )}
 
+            <div className={`bm__split ${previewUrl ? 'bm__split--with-preview' : ''}`}>
             <div className="bm__list">
               {rows.map((r) => (
                 <div
@@ -225,8 +256,13 @@ export default function BookmarksTool() {
                     <input
                       type="number"
                       min={1}
+                      max={totalPages ?? undefined}
                       value={r.page}
-                      onChange={(e) => patchRow(r.id, { page: Math.max(1, Number(e.target.value) || 1) })}
+                      onChange={(e) => {
+                        let p = Math.max(1, Number(e.target.value) || 1);
+                        if (totalPages !== null) p = Math.min(p, totalPages);
+                        patchRow(r.id, { page: p });
+                      }}
                     />
                   </label>
                   {r.source !== 'user_created' && (
@@ -247,6 +283,21 @@ export default function BookmarksTool() {
                   </button>
                 </div>
               ))}
+            </div>
+
+            {previewUrl && (
+              <div className="bm__preview">
+                <p className="bm__preview-label">
+                  📄 Document preview — check headings and page numbers side-by-side
+                  {totalPages !== null && ` (${totalPages} pages)`}
+                </p>
+                <iframe
+                  src={`${previewUrl}#toolbar=0&navpanes=0`}
+                  title="Document preview"
+                  className="bm__preview-frame"
+                />
+              </div>
+            )}
             </div>
 
             <button type="button" className="er__btn er__btn--outline" onClick={addManual}>

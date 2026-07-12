@@ -3,6 +3,7 @@ import { documentApi, trackTool } from '../../services/documentApi';
 import { friendlyError } from '../../services/friendlyError';
 import { gateTool } from '../../services/billingApi';
 import PlanBanner from '../../components/PlanBanner';
+import ToolNote from '../../components/ToolNote';
 import Dropzone from '../ErrorReport/Dropzone';
 import FileList from '../ErrorReport/FileList';
 import ProcessingPanel from '../../components/ProcessingPanel';
@@ -67,6 +68,12 @@ export default function AnnexuresTool() {
         </header>
 
         <PlanBanner />
+
+        <ToolNote>
+          Each annexure gets its label (<strong>Annexure A-1, A-2, …</strong>) stamped at the{' '}
+          <strong>top-centre of its first page</strong>, in upload order. Page numbering continues
+          across annexures so the final PDF reads as one filing.
+        </ToolNote>
 
         {(phase === 'idle' || phase === 'processing') && (
           <>

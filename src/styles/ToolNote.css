@@ -1,0 +1,32 @@
+/* Small info/disclaimer strip under tool headers. */
+
+.tool-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  border: 1px solid var(--border, #e0d9c8);
+  border-left: 3px solid var(--ink, #1a1a1a);
+  background: rgba(26, 26, 26, 0.03);
+  padding: 0.65rem 1rem;
+  margin-bottom: 1.2rem;
+  border-radius: 0 6px 6px 0;
+}
+
+.tool-note__icon {
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--muted, #777);
+  flex-shrink: 0;
+}
+
+.tool-note__text {
+  font-family: var(--sans, sans-serif);
+  font-size: 0.82rem;
+  color: var(--muted, #555);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.tool-note__text strong {
+  color: var(--ink, #1a1a1a);
+}
