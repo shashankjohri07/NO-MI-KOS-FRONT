@@ -128,7 +128,7 @@ export default function HomePage() {
           </p>
           <div className="hero__actions">
             {user ? (
-              <Link to="/options" className="btn btn--primary btn--lg">
+              <Link to="/products" className="btn btn--primary btn--lg">
                 Open Dashboard →
               </Link>
             ) : (

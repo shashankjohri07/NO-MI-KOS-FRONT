@@ -1,7 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import HomePage from '../pages/HomePage.tsx';
 import Products from '../pages/Products.tsx';
-import UserOptions from '../pages/UserOptions.tsx';
 import ErrorReport from '../pages/ErrorReport';
 import Login from '../pages/Login.tsx';
 import Signup from '../pages/Signup.tsx';
@@ -27,14 +26,6 @@ const AppRoutes = () => {
 
       <Route path="/products" element={<Products />} />
       <Route path="/pricing" element={<Pricing />} />
-      <Route
-        path="/options"
-        element={
-          <RequireAuth>
-            <UserOptions />
-          </RequireAuth>
-        }
-      />
       <Route
         path="/prep"
         element={

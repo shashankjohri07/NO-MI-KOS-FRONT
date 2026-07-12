@@ -22,7 +22,7 @@ export default function Hero() {
 
         <div className="hero__actions">
           {user ? (
-            <Link to="/options" className="btn btn--primary">
+            <Link to="/products" className="btn btn--primary">
               Open Dashboard →
             </Link>
           ) : (
