@@ -34,6 +34,8 @@ export default function BookmarksTool() {
   const [totalPages, setTotalPages] = useState<number | null>(null);
   // Blob URL of the uploaded document for the side-by-side review preview.
   const [previewUrl, setPreviewUrl] = useState('');
+  // Nesting levels are an advanced concept — hidden unless the user opts in.
+  const [showLevels, setShowLevels] = useState(false);
   const nextId = useRef(0);
 
   useEffect(() => {
@@ -130,6 +132,17 @@ export default function BookmarksTool() {
 
   const removeRow = (id: number) => setRows((rs) => rs.filter((r) => r.id !== id));
 
+  // Swap a row with its neighbour so the user can reorder the outline.
+  const moveRow = (id: number, dir: -1 | 1) =>
+    setRows((rs) => {
+      const i = rs.findIndex((r) => r.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= rs.length) return rs;
+      const next = [...rs];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+
   const addManual = () =>
     setRows((rs) => [
       ...rs,
@@ -163,7 +176,7 @@ export default function BookmarksTool() {
           Bookmarks are the <strong>clickable outline in the PDF sidebar</strong> — they don&apos;t
           change how any page looks or prints. Headings detected with <strong>60 %+ confidence</strong>{' '}
           are auto-selected; lower-confidence ones are shown unchecked so you can include them
-          manually if needed. Edit titles, adjust levels, or ✗ remove any entry — nothing is
+          manually if needed. Edit titles, reorder with ↑↓, or ✗ remove any entry — nothing is
           written until you hit <strong>Apply</strong>.
         </ToolNote>
 
@@ -219,14 +232,43 @@ export default function BookmarksTool() {
               </p>
             )}
 
+            <label className="bm__levels-toggle">
+              <input
+                type="checkbox"
+                checked={showLevels}
+                onChange={(e) => setShowLevels(e.target.checked)}
+              />
+              Show nesting levels (indent sub-sections under chapters)
+            </label>
+
             <div className={`bm__split ${previewUrl ? 'bm__split--with-preview' : ''}`}>
             <div className="bm__list">
-              {rows.map((r) => (
+              {rows.map((r, i) => (
                 <div
                   key={r.id}
                   className={`bm__row ${r.included ? '' : 'bm__row--excluded'}`}
-                  style={{ paddingLeft: `${(r.level - 1) * 1.4 + 0.75}rem` }}
+                  style={showLevels ? { paddingLeft: `${(r.level - 1) * 1.4 + 0.75}rem` } : undefined}
                 >
+                  <span className="bm__row-move">
+                    <button
+                      type="button"
+                      className="bm__row-arrow"
+                      onClick={() => moveRow(r.id, -1)}
+                      disabled={i === 0}
+                      aria-label="Move up"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="bm__row-arrow"
+                      onClick={() => moveRow(r.id, 1)}
+                      disabled={i === rows.length - 1}
+                      aria-label="Move down"
+                    >
+                      ↓
+                    </button>
+                  </span>
                   <input
                     type="checkbox"
                     className="bm__row-check"
@@ -241,18 +283,20 @@ export default function BookmarksTool() {
                     placeholder="Bookmark title"
                     onChange={(e) => patchRow(r.id, { title: e.target.value })}
                   />
-                  <label className="bm__row-field">
-                    Lv
-                    <input
-                      type="number"
-                      min={1}
-                      max={6}
-                      value={r.level}
-                      onChange={(e) =>
-                        patchRow(r.id, { level: Math.max(1, Math.min(6, Number(e.target.value) || 1)) })
-                      }
-                    />
-                  </label>
+                  {showLevels && (
+                    <label className="bm__row-field">
+                      Lv
+                      <input
+                        type="number"
+                        min={1}
+                        max={6}
+                        value={r.level}
+                        onChange={(e) =>
+                          patchRow(r.id, { level: Math.max(1, Math.min(6, Number(e.target.value) || 1)) })
+                        }
+                      />
+                    </label>
+                  )}
                   <label className="bm__row-field">
                     Pg
                     <input
