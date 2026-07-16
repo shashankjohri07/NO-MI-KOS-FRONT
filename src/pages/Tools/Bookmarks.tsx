@@ -20,6 +20,9 @@ import '../../styles/Bookmarks.css';
 interface ReviewRow extends BookmarkHeading {
   id: number;
   included: boolean;
+  /** Optional end page when the section spans a range (e.g. pp. 5–7).
+   * The bookmark still jumps to `page`; the range is shown in the title. */
+  pageEnd?: number;
 }
 
 const CONFIDENT = 0.6;
@@ -36,6 +39,12 @@ export default function BookmarksTool() {
   const [previewUrl, setPreviewUrl] = useState('');
   // Nesting levels are an advanced concept — hidden unless the user opts in.
   const [showLevels, setShowLevels] = useState(false);
+  // Drag-to-reorder state: id being dragged and the row currently hovered.
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
+  // Row becomes draggable only while the mouse is down on its ⋮⋮ grip, so
+  // selecting text in the title input never starts a drag.
+  const [dragArmedId, setDragArmedId] = useState<number | null>(null);
   const nextId = useRef(0);
 
   useEffect(() => {
@@ -110,9 +119,17 @@ export default function BookmarksTool() {
       }
       const { blob, filename } = await documentApi.applyBookmarks(
         doc.files,
-        finalRows.map(({ title, level, page, confidence, source }) => ({
-          title: title.trim(),
-          level,
+        finalRows.map(({ title, level, page, pageEnd, confidence, source }) => ({
+          // A section spanning a range keeps its destination at the start
+          // page (PDF bookmarks jump to ONE page) but shows the range in
+          // the outline title, e.g. "Annexure A-3 (pp. 5–7)".
+          title:
+            pageEnd && pageEnd > page
+              ? `${title.trim()} (pp. ${page}–${pageEnd})`
+              : title.trim(),
+          // Nesting only applies when the user opted in; otherwise the
+          // PDF outline is written flat.
+          level: showLevels ? level : 1,
           page,
           confidence,
           source,
@@ -132,16 +149,19 @@ export default function BookmarksTool() {
 
   const removeRow = (id: number) => setRows((rs) => rs.filter((r) => r.id !== id));
 
-  // Swap a row with its neighbour so the user can reorder the outline.
-  const moveRow = (id: number, dir: -1 | 1) =>
+  // Drop the dragged row at the hovered row's position (drag-to-reorder).
+  const dropRow = (targetId: number) => {
+    if (dragId === null || dragId === targetId) return;
     setRows((rs) => {
-      const i = rs.findIndex((r) => r.id === id);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= rs.length) return rs;
+      const from = rs.findIndex((r) => r.id === dragId);
+      const to = rs.findIndex((r) => r.id === targetId);
+      if (from < 0 || to < 0) return rs;
       const next = [...rs];
-      [next[i], next[j]] = [next[j], next[i]];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
       return next;
     });
+  };
 
   const addManual = () =>
     setRows((rs) => [
@@ -243,31 +263,46 @@ export default function BookmarksTool() {
 
             <div className={`bm__split ${previewUrl ? 'bm__split--with-preview' : ''}`}>
             <div className="bm__list">
-              {rows.map((r, i) => (
+              {rows.map((r) => (
                 <div
                   key={r.id}
-                  className={`bm__row ${r.included ? '' : 'bm__row--excluded'}`}
+                  className={[
+                    'bm__row',
+                    r.included ? '' : 'bm__row--excluded',
+                    dragId === r.id ? 'bm__row--dragging' : '',
+                    dragOverId === r.id && dragId !== r.id ? 'bm__row--dragover' : '',
+                  ].join(' ')}
                   style={showLevels ? { paddingLeft: `${(r.level - 1) * 1.4 + 0.75}rem` } : undefined}
+                  draggable={dragArmedId === r.id}
+                  onDragStart={(e) => {
+                    setDragId(r.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverId !== r.id) setDragOverId(r.id);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    dropRow(r.id);
+                    setDragId(null);
+                    setDragOverId(null);
+                  }}
+                  onDragEnd={() => {
+                    setDragId(null);
+                    setDragOverId(null);
+                    setDragArmedId(null);
+                  }}
                 >
-                  <span className="bm__row-move">
-                    <button
-                      type="button"
-                      className="bm__row-arrow"
-                      onClick={() => moveRow(r.id, -1)}
-                      disabled={i === 0}
-                      aria-label="Move up"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="bm__row-arrow"
-                      onClick={() => moveRow(r.id, 1)}
-                      disabled={i === rows.length - 1}
-                      aria-label="Move down"
-                    >
-                      ↓
-                    </button>
+                  <span
+                    className="bm__row-grip"
+                    title="Drag to reorder"
+                    aria-hidden
+                    onMouseDown={() => setDragArmedId(r.id)}
+                    onMouseUp={() => setDragArmedId(null)}
+                  >
+                    ⋮⋮
                   </span>
                   <input
                     type="checkbox"
@@ -308,6 +343,25 @@ export default function BookmarksTool() {
                         let p = Math.max(1, Number(e.target.value) || 1);
                         if (totalPages !== null) p = Math.min(p, totalPages);
                         patchRow(r.id, { page: p });
+                      }}
+                    />
+                    –
+                    <input
+                      type="number"
+                      min={r.page}
+                      max={totalPages ?? undefined}
+                      value={r.pageEnd ?? ''}
+                      placeholder="to"
+                      title="Optional end page — for a section spanning multiple pages"
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === '') {
+                          patchRow(r.id, { pageEnd: undefined });
+                          return;
+                        }
+                        let p = Math.max(1, Number(raw) || 1);
+                        if (totalPages !== null) p = Math.min(p, totalPages);
+                        patchRow(r.id, { pageEnd: p });
                       }}
                     />
                   </label>
