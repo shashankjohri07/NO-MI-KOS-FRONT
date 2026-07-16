@@ -127,7 +127,9 @@ export default function BookmarksTool() {
             pageEnd && pageEnd > page
               ? `${title.trim()} (pp. ${page}–${pageEnd})`
               : title.trim(),
-          level,
+          // Nesting only applies when the user opted in; otherwise the
+          // PDF outline is written flat.
+          level: showLevels ? level : 1,
           page,
           confidence,
           source,
