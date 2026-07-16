@@ -40,6 +40,59 @@
   opacity: 0.4;
 }
 
+/* Mode pills: NCLAT paper-book (default) vs free-form. */
+.bm__mode {
+  display: inline-flex;
+  border: 1px solid var(--border, #e0d9c8);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+.bm__mode-btn {
+  background: none;
+  border: none;
+  padding: 0.45rem 1.1rem;
+  font-family: var(--mono, monospace);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted, #8a8272);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.bm__mode-btn--active {
+  background: var(--ink, #1a1a1a);
+  color: var(--paper, #faf7f0);
+}
+
+/* NCLAT: annexure rows sit slightly indented under the sections. */
+.bm__row--annex {
+  padding-left: 1.6rem;
+}
+
+/* NCLAT: template section not found in the document. */
+.bm__row-hint {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-style: italic;
+  color: var(--muted, #8a8272);
+}
+
+/* Free-form: low-confidence rows tucked into a collapsed group. */
+.bm__unsure {
+  margin-top: 0.75rem;
+}
+.bm__unsure summary {
+  font-size: 0.8rem;
+  color: var(--muted, #8a8272);
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 0.5rem;
+}
+.bm__unsure summary:hover {
+  color: var(--gold, #b8962e);
+}
+
 .bm__row-grip {
   flex-shrink: 0;
   color: var(--muted, #8a8272);
@@ -60,21 +113,6 @@
 }
 .bm__row--dragover {
   box-shadow: inset 0 2px 0 var(--gold, #b8962e);
-}
-
-.bm__levels-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--muted, #8a8272);
-  margin-bottom: 0.75rem;
-  cursor: pointer;
-  user-select: none;
-}
-.bm__levels-toggle input {
-  accent-color: var(--gold, #b8962e);
-  cursor: pointer;
 }
 
 .bm__row-check {
@@ -122,25 +160,6 @@
   border-radius: 4px;
   background: #fff;
   font-family: inherit;
-}
-
-.bm__row-conf {
-  flex-shrink: 0;
-  font-family: var(--mono, monospace);
-  font-size: 0.6rem;
-  padding: 0.15rem 0.4rem;
-  border-radius: 3px;
-  border: 1px solid;
-}
-.bm__row-conf--hi {
-  color: var(--sage, #3a5a4a);
-  border-color: rgba(58, 90, 74, 0.3);
-  background: rgba(58, 90, 74, 0.06);
-}
-.bm__row-conf--lo {
-  color: var(--rust, #8b3a2a);
-  border-color: rgba(139, 58, 42, 0.3);
-  background: rgba(139, 58, 42, 0.06);
 }
 
 .bm__row-delete {
