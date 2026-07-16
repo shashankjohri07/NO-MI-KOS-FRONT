@@ -34,6 +34,12 @@ export default function BookmarksTool() {
   const [totalPages, setTotalPages] = useState<number | null>(null);
   // Blob URL of the uploaded document for the side-by-side review preview.
   const [previewUrl, setPreviewUrl] = useState('');
+  // Drag-to-reorder state: id being dragged and the row currently hovered.
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
+  // Row becomes draggable only while the mouse is down on its ⋮⋮ grip, so
+  // selecting text in the title input never starts a drag.
+  const [dragArmedId, setDragArmedId] = useState<number | null>(null);
   const nextId = useRef(0);
 
   useEffect(() => {
@@ -130,6 +136,20 @@ export default function BookmarksTool() {
 
   const removeRow = (id: number) => setRows((rs) => rs.filter((r) => r.id !== id));
 
+  // Drop the dragged row at the hovered row's position (drag-to-reorder).
+  const dropRow = (targetId: number) => {
+    if (dragId === null || dragId === targetId) return;
+    setRows((rs) => {
+      const from = rs.findIndex((r) => r.id === dragId);
+      const to = rs.findIndex((r) => r.id === targetId);
+      if (from < 0 || to < 0) return rs;
+      const next = [...rs];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+
   const addManual = () =>
     setRows((rs) => [
       ...rs,
@@ -224,9 +244,44 @@ export default function BookmarksTool() {
               {rows.map((r) => (
                 <div
                   key={r.id}
-                  className={`bm__row ${r.included ? '' : 'bm__row--excluded'}`}
+                  className={[
+                    'bm__row',
+                    r.included ? '' : 'bm__row--excluded',
+                    dragId === r.id ? 'bm__row--dragging' : '',
+                    dragOverId === r.id && dragId !== r.id ? 'bm__row--dragover' : '',
+                  ].join(' ')}
                   style={{ paddingLeft: `${(r.level - 1) * 1.4 + 0.75}rem` }}
+                  draggable={dragArmedId === r.id}
+                  onDragStart={(e) => {
+                    setDragId(r.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverId !== r.id) setDragOverId(r.id);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    dropRow(r.id);
+                    setDragId(null);
+                    setDragOverId(null);
+                  }}
+                  onDragEnd={() => {
+                    setDragId(null);
+                    setDragOverId(null);
+                    setDragArmedId(null);
+                  }}
                 >
+                  <span
+                    className="bm__row-grip"
+                    title="Drag to reorder"
+                    aria-hidden
+                    onMouseDown={() => setDragArmedId(r.id)}
+                    onMouseUp={() => setDragArmedId(null)}
+                  >
+                    ⋮⋮
+                  </span>
                   <input
                     type="checkbox"
                     className="bm__row-check"
