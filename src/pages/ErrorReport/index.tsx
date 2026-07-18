@@ -105,17 +105,24 @@ export default function ErrorReport() {
     const file = new File([numberedBlob], numberedFilename || 'document.pdf', {
       type: 'application/pdf',
     });
-    documentApi
-      .detectBookmarks(file)
+    // Suggestions are nice-to-have — never let a slow/cold backend hold the
+    // step hostage. Past 45s we give up and let the user type rows manually.
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('detection timed out')), 45000),
+    );
+    Promise.race([documentApi.detectBookmarks(file), timeout])
       .then((res) => {
         if (cancelled) return;
+        // Detection reports PHYSICAL pages of the numbered PDF; the rows are
+        // in STAMPED numbering (physical minus the unstamped front pages).
+        const skip = safeIndexEnd();
         setCtRows(
           (res.ok ? res.headings : [])
-            .filter((h) => h.confidence >= 0.6)
+            .filter((h) => h.confidence >= 0.6 && h.page > skip)
             .map((h) => ({
               id: ctNextId.current++,
               title: h.title,
-              pages: String(h.page),
+              pages: String(h.page - skip),
             })),
         );
         setCtLoaded(true);
@@ -130,8 +137,13 @@ export default function ErrorReport() {
       });
     return () => {
       cancelled = true;
+      setCtLoading(false); // stepping away abandons the scan; re-entering retries
     };
-  }, [step, numberedBlob, numberedFilename, ctLoaded, ctLoading]);
+    // ctLoaded/ctLoading are guards, NOT deps: listing them re-fires the
+    // cleanup the moment setCtLoading(true) renders, cancelling the fetch
+    // we just started — the step then spins forever.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, numberedBlob]);
 
   const patchCtRow = (id: number, patch: Partial<ContentsRow>) =>
     setCtRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -364,13 +376,16 @@ export default function ErrorReport() {
         if (indexOffset > 0) {
           headings.push({ title: 'Index', level: 1, page: 1, confidence: 1, source: 'user_created' });
         }
+        // Rows are in STAMPED numbering; the PDF's physical page is that
+        // plus the unstamped front pages, plus whatever the index prepended.
+        const skip = safeIndexEnd();
         for (const r of ctFinal) {
           const p = firstPageOf(r.pages);
           if (p === null) continue; // no parseable page — index-only row
           headings.push({
             title: r.title.trim(),
             level: 1,
-            page: p + indexOffset,
+            page: p + skip + indexOffset,
             confidence: 1,
             source: 'user_created',
           });
@@ -595,7 +610,9 @@ export default function ErrorReport() {
             {ctLoading && (
               <div className="er__processing">
                 <div className="er__spinner" />
-                <p className="er__processing-text">Scanning your document for suggestions…</p>
+                <p className="er__processing-text">
+                  Scanning your document for suggestions… you can skip ahead any time.
+                </p>
               </div>
             )}
 
@@ -697,10 +714,11 @@ export default function ErrorReport() {
             )}
 
             <div className="er__annex-prompt-actions">
-              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('sigs')} disabled={ctLoading}>
-                {ctFinal.length > 0 && (doIndex || doBookmarks)
+              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('sigs')}>
+                {ctLoading && 'Skip suggestions →'}
+                {!ctLoading && (ctFinal.length > 0 && (doIndex || doBookmarks)
                   ? `Next: Signatures (${ctFinal.length} row${ctFinal.length === 1 ? '' : 's'}) →`
-                  : 'Skip contents →'}
+                  : 'Skip contents →')}
               </button>
               <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('preview')}>
                 ← Back to Preview
