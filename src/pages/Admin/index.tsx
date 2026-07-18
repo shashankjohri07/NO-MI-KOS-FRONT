@@ -222,7 +222,9 @@ const VARIANT_LABELS: Record<ProductTag['tagVariant'], string> = {
 
 function ProductTags() {
   const [tags, setTags] = useState<ProductTagMap>(() =>
-    Object.fromEntries(PRODUCT_DEFS.map((p) => [p.key, { tag: p.tag, tagVariant: p.tagVariant }])),
+    Object.fromEntries(
+      PRODUCT_DEFS.map((p) => [p.key, { tag: p.tag, tagVariant: p.tagVariant, order: p.order }]),
+    ),
   );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
@@ -259,17 +261,28 @@ function ProductTags() {
     <section className="adm__card">
       <h2 className="adm__card-title">Product card tags</h2>
       <p className="adm__hint">
-        The badge shown on each product card ("Live", "New", …). Changes apply to the live
-        products page without a code deploy.
+        The badge shown on each product card ("Live", "New", …) and the order the cards appear
+        on the products page (1 = shown first). Changes apply to the live products page without a
+        code deploy.
       </p>
 
       <table className="adm__table">
         <thead>
-          <tr><th>Product</th><th>Tag text</th><th>Style</th></tr>
+          <tr><th>Order</th><th>Product</th><th>Tag text</th><th>Style</th></tr>
         </thead>
         <tbody>
           {PRODUCT_DEFS.map((p) => (
             <tr key={p.key}>
+              <td>
+                <input
+                  className="adm__input"
+                  type="number"
+                  min={1}
+                  style={{ width: '4.5rem' }}
+                  value={tags[p.key]?.order ?? p.order}
+                  onChange={(e) => patch(p.key, { order: Number(e.target.value) })}
+                />
+              </td>
               <td>{p.title}</td>
               <td>
                 <input

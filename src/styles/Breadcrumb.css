@@ -1,7 +1,12 @@
 .crumb {
-  width: 100%;
-  margin: 0 auto 2.5rem;
-  max-width: 760px;
+  /* Break out of the narrow (≈800px) step container so all seven full
+     labels fit on one row, centred on the viewport. */
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1080px, calc(100vw - 4rem));
+  max-width: none;
+  margin: 0 0 2.5rem;
 }
 
 .crumb__list {
@@ -34,7 +39,7 @@
   cursor: pointer;
   transition: color var(--duration) var(--ease);
   text-align: left;
-  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .crumb__node:disabled {
@@ -63,8 +68,6 @@
 .crumb__label {
   text-transform: uppercase;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .crumb__sep {
@@ -98,9 +101,14 @@
   opacity: 0.6;
 }
 
-@media (max-width: 600px) {
+/* Below this width the seven full labels no longer fit on one row, so we
+   collapse to just the numbered circles + connectors. */
+@media (max-width: 960px) {
   .crumb__label {
     display: none;
+  }
+  .crumb__node {
+    flex: 1 1 auto;
   }
   .crumb__sep {
     margin: 0 0.4rem;

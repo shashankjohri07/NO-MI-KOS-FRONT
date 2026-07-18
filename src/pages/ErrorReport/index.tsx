@@ -731,10 +731,6 @@ export default function ErrorReport() {
 
             {ctPreviewUrl && (
               <div className="er__ct-preview">
-                <p className="er__preview-label">
-                  📄 Your numbered document — read the stamped page numbers (top-right) while
-                  filling the list.
-                </p>
                 <div className="er__preview er__ct-preview-box">
                   <iframe
                     src={`${ctPreviewUrl}#toolbar=1&navpanes=0`}
@@ -839,7 +835,6 @@ export default function ErrorReport() {
         {/* ── Review + Phase 2 processing ── */}
         {(step === 'review' || step === 'processing') && (
           <section className="er__upload-section">
-            <h2 className="er__section-heading">Review your order</h2>
             <ul className="er__cart">
               <li className="er__cart-row">
                 <span className="er__cart-what">📄 Main document</span>

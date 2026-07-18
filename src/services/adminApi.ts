@@ -73,10 +73,12 @@ export interface FeedbackEntry {
   created_at: string;
 }
 
-/** Card tag override per product key, editable from the admin dashboard. */
+/** Card tag override per product key, editable from the admin dashboard.
+ * `order` controls the position on the products page (1 = first). */
 export interface ProductTag {
   tag: string;
   tagVariant: 'live' | 'soon' | 'later';
+  order?: number;
 }
 export type ProductTagMap = Record<string, ProductTag>;
 
