@@ -726,6 +726,47 @@
   text-align: right;
 }
 
+/* Contents step — rows on the left, numbered-PDF preview on the right */
+.er__ct-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.2rem;
+  align-items: start;
+}
+
+.er__ct-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.er__ct-preview {
+  position: sticky;
+  top: 1rem;
+  min-width: 0;
+}
+
+.er__ct-preview-box {
+  height: 60vh;
+  min-height: 420px;
+  margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .er__ct-split {
+    grid-template-columns: 1fr;
+  }
+  .er__ct-preview {
+    position: static;
+    order: -1; /* preview above the rows on small screens */
+  }
+  .er__ct-preview-box {
+    height: 45vh;
+    min-height: 320px;
+  }
+}
+
 .er__ct-outputs {
   display: flex;
   flex-direction: column;

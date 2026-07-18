@@ -145,6 +145,19 @@ export default function ErrorReport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, numberedBlob]);
 
+  // Object URL so the numbered PDF can sit beside the rows — the user reads
+  // the stamped page numbers on the right while typing pages on the left.
+  const [ctPreviewUrl, setCtPreviewUrl] = useState<string>('');
+  useEffect(() => {
+    if (step !== 'contents' || !numberedBlob) {
+      setCtPreviewUrl('');
+      return;
+    }
+    const url = URL.createObjectURL(numberedBlob);
+    setCtPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [step, numberedBlob]);
+
   const patchCtRow = (id: number, patch: Partial<ContentsRow>) =>
     setCtRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const removeCtRow = (id: number) => setCtRows((rs) => rs.filter((r) => r.id !== id));
@@ -607,6 +620,8 @@ export default function ErrorReport() {
               set ranges, add what&apos;s missing. Optional: skip if not needed.
             </p>
 
+            <div className={ctPreviewUrl ? 'er__ct-split' : undefined}>
+            <div className="er__ct-form">
             {ctLoading && (
               <div className="er__processing">
                 <div className="er__spinner" />
@@ -712,6 +727,24 @@ export default function ErrorReport() {
                 )}
               </>
             )}
+            </div>
+
+            {ctPreviewUrl && (
+              <div className="er__ct-preview">
+                <p className="er__preview-label">
+                  📄 Your numbered document — read the stamped page numbers (top-right) while
+                  filling the list.
+                </p>
+                <div className="er__preview er__ct-preview-box">
+                  <iframe
+                    src={`${ctPreviewUrl}#toolbar=1&navpanes=0`}
+                    title="Numbered document preview"
+                    className="er__preview-frame"
+                  />
+                </div>
+              </div>
+            )}
+            </div>
 
             <div className="er__annex-prompt-actions">
               <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('sigs')}>
