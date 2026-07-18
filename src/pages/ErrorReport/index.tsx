@@ -33,8 +33,7 @@ type Step =
   | 'annex'       // collect annexure files
   | 'merging'     // Phase 1 processing (merge + number)
   | 'preview'     // show numbered PDF, ask if signatures needed
-  | 'bookmarks'   // review auto-detected bookmarks on the numbered PDF
-  | 'index'       // master index page — rows pre-filled from bookmarks
+  | 'contents'    // ONE list (title + pages) -> Master Index AND bookmarks
   | 'sigs'        // collect annexure signatures
   | 'special'     // collect special page signatures (user sees numbered PDF)
   | 'review'      // final review before Phase 2
@@ -42,7 +41,7 @@ type Step =
   | 'done'
   | 'error';
 
-const STEP_ORDER: Step[] = ['main', 'annex', 'merging', 'preview', 'bookmarks', 'index', 'sigs', 'special', 'review'];
+const STEP_ORDER: Step[] = ['main', 'annex', 'merging', 'preview', 'contents', 'sigs', 'special', 'review'];
 
 function stepIndex(s: Step): number {
   const i = STEP_ORDER.indexOf(s);
@@ -73,34 +72,36 @@ export default function ErrorReport() {
   // Total pages in the numbered PDF (main + annexure pages combined).
   const [numberedTotalPages, setNumberedTotalPages] = useState<number | null>(null);
 
-  // ── Bookmarks step: rows detected on the NUMBERED PDF ──
-  interface BmRow {
+  // ── Contents step: ONE user-curated list (title + pages) that drives BOTH
+  // the Master Index page and the clickable bookmarks. Detection on the
+  // numbered PDF only pre-fills suggestions — the user's list is the source
+  // of truth (detection is unreliable on scanned pages and its wording is
+  // not filing language).
+  interface ContentsRow {
     id: number;
     title: string;
-    page: number;
-    included: boolean;
-    confidence: number;
-    source: BookmarkHeading['source'];
+    /** Page or range in stamped numbering, e.g. "5" or "5-7". The index
+     * prints it verbatim; the bookmark jumps to the first number. */
+    pages: string;
   }
-  const [bmRows, setBmRows] = useState<BmRow[]>([]);
-  const [bmLoaded, setBmLoaded] = useState(false);
-  const [bmLoading, setBmLoading] = useState(false);
-  const bmNextId = useRef(0);
-
-  // ── Index step: case details + rows (pre-filled from bookmarks) ──
-  const [idxWanted, setIdxWanted] = useState(false);
+  const [ctRows, setCtRows] = useState<ContentsRow[]>([]);
+  const [ctLoaded, setCtLoaded] = useState(false);
+  const [ctLoading, setCtLoading] = useState(false);
+  const ctNextId = useRef(0);
+  const [wantIndex, setWantIndex] = useState(true);
+  const [wantBookmarks, setWantBookmarks] = useState(true);
+  // Case details for the index page header (only used when wantIndex).
   const [idxCourt, setIdxCourt] = useState('');
   const [idxCaseLine, setIdxCaseLine] = useState('');
   const [idxPlace, setIdxPlace] = useState('');
   const [idxDate, setIdxDate] = useState('');
-  const [idxRows, setIdxRows] = useState<IndexRow[]>([]);
-  const [idxPrefilled, setIdxPrefilled] = useState(false);
 
-  // Detect bookmarks once per numbered PDF, when the step is first opened.
+  // Detect headings once per numbered PDF when the step first opens —
+  // suggestions only, silently empty on scanned documents.
   useEffect(() => {
-    if (step !== 'bookmarks' || !numberedBlob || bmLoaded || bmLoading) return;
+    if (step !== 'contents' || !numberedBlob || ctLoaded || ctLoading) return;
     let cancelled = false;
-    setBmLoading(true);
+    setCtLoading(true);
     const file = new File([numberedBlob], numberedFilename || 'document.pdf', {
       type: 'application/pdf',
     });
@@ -108,59 +109,47 @@ export default function ErrorReport() {
       .detectBookmarks(file)
       .then((res) => {
         if (cancelled) return;
-        setBmRows(
-          (res.ok ? res.headings : []).map((h) => ({
-            id: bmNextId.current++,
-            title: h.title,
-            page: h.page,
-            included: h.confidence >= 0.6,
-            confidence: h.confidence,
-            source: h.source,
-          })),
+        setCtRows(
+          (res.ok ? res.headings : [])
+            .filter((h) => h.confidence >= 0.6)
+            .map((h) => ({
+              id: ctNextId.current++,
+              title: h.title,
+              pages: String(h.page),
+            })),
         );
-        setBmLoaded(true);
+        setCtLoaded(true);
       })
       .catch(() => {
         if (cancelled) return;
-        setBmRows([]);
-        setBmLoaded(true); // detection failed — user can still add manually
+        setCtRows([]);
+        setCtLoaded(true); // detection failed — user types rows manually
       })
       .finally(() => {
-        if (!cancelled) setBmLoading(false);
+        if (!cancelled) setCtLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [step, numberedBlob, numberedFilename, bmLoaded, bmLoading]);
+  }, [step, numberedBlob, numberedFilename, ctLoaded, ctLoading]);
 
-  const patchBmRow = (id: number, patch: Partial<BmRow>) =>
-    setBmRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const removeBmRow = (id: number) => setBmRows((rs) => rs.filter((r) => r.id !== id));
-  const addBmRow = () =>
-    setBmRows((rs) => [
-      ...rs,
-      { id: bmNextId.current++, title: '', page: 1, included: true, confidence: 1, source: 'user_created' },
-    ]);
+  const patchCtRow = (id: number, patch: Partial<ContentsRow>) =>
+    setCtRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const removeCtRow = (id: number) => setCtRows((rs) => rs.filter((r) => r.id !== id));
+  const addCtRow = () =>
+    setCtRows((rs) => [...rs, { id: ctNextId.current++, title: '', pages: '' }]);
 
-  const bmSelected = bmRows.filter((r) => r.included && r.title.trim());
+  /** First page number of a "5" / "5-7" pages value; null when unparseable. */
+  const firstPageOf = (pages: string): number | null => {
+    const m = /^\s*(\d+)/.exec(pages);
+    if (!m) return null;
+    const n = Number.parseInt(m[1], 10);
+    return Number.isFinite(n) && n >= 1 ? n : null;
+  };
 
-  // Entering the Index step pre-fills its rows from the selected bookmarks
-  // (once — user edits are never clobbered).
-  useEffect(() => {
-    if (step !== 'index' || idxPrefilled) return;
-    if (bmSelected.length > 0) {
-      setIdxRows(bmSelected.map((r) => ({ title: r.title.trim(), pages: String(r.page) })));
-    }
-    setIdxPrefilled(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, idxPrefilled]);
-
-  const patchIdxRow = (i: number, patch: Partial<IndexRow>) =>
-    setIdxRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const removeIdxRow = (i: number) => setIdxRows((rs) => rs.filter((_, j) => j !== i));
-  const addIdxRow = () => setIdxRows((rs) => [...rs, { title: '', pages: '' }]);
-
-  const idxReady = idxWanted && idxRows.some((r) => r.title.trim());
+  const ctFinal = ctRows.filter((r) => r.title.trim());
+  const doIndex = wantIndex && ctFinal.length > 0;
+  const doBookmarks = wantBookmarks && ctFinal.length > 0;
 
   const clientSigInputRef = useRef<HTMLInputElement>(null);
   const clientSig2InputRef = useRef<HTMLInputElement>(null);
@@ -249,15 +238,14 @@ export default function ErrorReport() {
     setNumberedBlob(null);
     setNumberedFilename('');
     setNumberedTotalPages(null);
-    setBmRows([]);
-    setBmLoaded(false);
-    setIdxWanted(false);
+    setCtRows([]);
+    setCtLoaded(false);
+    setWantIndex(true);
+    setWantBookmarks(true);
     setIdxCourt('');
     setIdxCaseLine('');
     setIdxPlace('');
     setIdxDate('');
-    setIdxRows([]);
-    setIdxPrefilled(false);
     if (clientSigInputRef.current) clientSigInputRef.current.value = '';
     if (clientSig2InputRef.current) clientSig2InputRef.current.value = '';
     if (advocateSigInputRef.current) advocateSigInputRef.current.value = '';
@@ -343,16 +331,20 @@ export default function ErrorReport() {
 
       // 2) Master index page (prepended). Track how many pages it added.
       let indexOffset = 0;
-      if (idxReady) {
+      if (doIndex) {
         const beforeFile = new File([blob], filename, { type: 'application/pdf' });
         const before = await countTotalPages([beforeFile]);
+        const rows: IndexRow[] = ctFinal.map((r) => ({
+          title: r.title.trim(),
+          pages: r.pages.trim(),
+        }));
         ({ blob, filename } = await documentApi.generateIndex(
           {
             court: idxCourt.trim() ? idxCourt.split('\n').map((l) => l.trim()).filter(Boolean) : [],
             caseLines: idxCaseLine.trim() ? [idxCaseLine.trim()] : [],
             matters: [],
             indexTitle: 'INDEX',
-            rows: idxRows.filter((r) => r.title.trim()),
+            rows,
             advocates: [],
             place: idxPlace.trim(),
             date: idxDate.trim(),
@@ -365,26 +357,28 @@ export default function ErrorReport() {
         indexOffset = before !== null && after !== null ? after - before : 1;
       }
 
-      // 3) Bookmarks — written last so destinations are final.
-      if (bmSelected.length > 0) {
-        const headings: BookmarkHeading[] = bmSelected.map((r) => ({
-          title: r.title.trim(),
-          level: 1,
-          page: r.page + indexOffset,
-          confidence: r.confidence,
-          source: r.source,
-        }));
+      // 3) Bookmarks — written last so destinations are final. Each row's
+      // bookmark jumps to the FIRST page of its range, shifted by the index.
+      if (doBookmarks) {
+        const headings: BookmarkHeading[] = [];
         if (indexOffset > 0) {
-          headings.unshift({
-            title: 'Index',
+          headings.push({ title: 'Index', level: 1, page: 1, confidence: 1, source: 'user_created' });
+        }
+        for (const r of ctFinal) {
+          const p = firstPageOf(r.pages);
+          if (p === null) continue; // no parseable page — index-only row
+          headings.push({
+            title: r.title.trim(),
             level: 1,
-            page: 1,
+            page: p + indexOffset,
             confidence: 1,
             source: 'user_created',
           });
         }
-        const bmFile = new File([blob], filename, { type: 'application/pdf' });
-        ({ blob, filename } = await documentApi.applyBookmarks(bmFile, headings));
+        if (headings.length > 0) {
+          const bmFile = new File([blob], filename, { type: 'application/pdf' });
+          ({ blob, filename } = await documentApi.applyBookmarks(bmFile, headings));
+        }
       }
 
       triggerDownload(blob, filename);
@@ -401,27 +395,25 @@ export default function ErrorReport() {
     { label: 'Pages', active: step === 'main', done: furthest > 0 && step !== 'main', reachable: true },
     { label: 'Annexures', active: step === 'annex', done: furthest > 1 && step !== 'annex', reachable: main.files.length > 0 },
     { label: 'Preview', active: step === 'preview' || step === 'merging', done: furthest > 3 && step !== 'preview', reachable: !!numberedBlob },
-    { label: 'Bookmarks', active: step === 'bookmarks', done: furthest > 4 && step !== 'bookmarks', reachable: !!numberedBlob },
-    { label: 'Index', active: step === 'index', done: furthest > 5 && step !== 'index', reachable: !!numberedBlob },
-    { label: 'Signatures', active: step === 'sigs', done: furthest > 6 && step !== 'sigs', reachable: !!numberedBlob },
-    { label: 'Special Pages', active: step === 'special', done: furthest > 7 && step !== 'special', reachable: !!numberedBlob },
+    { label: 'Contents', active: step === 'contents', done: furthest > 4 && step !== 'contents', reachable: !!numberedBlob },
+    { label: 'Signatures', active: step === 'sigs', done: furthest > 5 && step !== 'sigs', reachable: !!numberedBlob },
+    { label: 'Special Pages', active: step === 'special', done: furthest > 6 && step !== 'special', reachable: !!numberedBlob },
     { label: 'Review', active: step === 'review' || step === 'processing', done: step === 'done', reachable: !!numberedBlob },
   ];
 
   // Going back to pages/annexures invalidates everything built on the
-  // numbered PDF (bookmarks were detected on it, index rows came from those).
+  // numbered PDF (contents suggestions were detected on it).
   const invalidateNumbered = () => {
     setNumberedBlob(null);
     setNumberedFilename('');
     setNumberedTotalPages(null);
-    setBmRows([]);
-    setBmLoaded(false);
-    setIdxPrefilled(false);
+    setCtRows([]);
+    setCtLoaded(false);
   };
 
   const jumpToStep = (idx: number) => {
     if (isBusy) return;
-    const targets: Step[] = ['main', 'annex', 'preview', 'bookmarks', 'index', 'sigs', 'special', 'review'];
+    const targets: Step[] = ['main', 'annex', 'preview', 'contents', 'sigs', 'special', 'review'];
     const target = targets[idx];
     if (!target) return;
     // Can't jump past preview without having a numbered PDF.
@@ -571,8 +563,8 @@ export default function ErrorReport() {
             )}
 
             <div className="er__annex-prompt-actions">
-              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('bookmarks')}>
-                Next: Bookmarks →
+              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('contents')}>
+                Next: Contents →
               </button>
               <button
                 type="button"
@@ -589,179 +581,129 @@ export default function ErrorReport() {
           </section>
         )}
 
-        {/* ── Step: Bookmarks (detected on the numbered PDF) ── */}
-        {step === 'bookmarks' && (
+        {/* ── Step: Contents — ONE list drives the Master Index AND bookmarks ── */}
+        {step === 'contents' && (
           <section className="er__upload-section">
             <p className="er__annex-prompt-hint">
-              These become the <strong>clickable outline in the PDF sidebar</strong>. We scanned
-              your numbered document — untick anything you don&apos;t want, fix titles or page
-              numbers, or add your own. Optional: skip if not needed.
+              List your document&apos;s contents once — title + page range (in stamped numbering).
+              We use this ONE list for both the <strong>Master Index page</strong> (added at the
+              front) and the <strong>clickable bookmarks</strong> in the PDF sidebar. We&apos;ve
+              pre-filled suggestions from your document — fix the wording to your filing language,
+              set ranges, add what&apos;s missing. Optional: skip if not needed.
             </p>
 
-            {bmLoading && (
+            {ctLoading && (
               <div className="er__processing">
                 <div className="er__spinner" />
-                <p className="er__processing-text">Scanning for headings…</p>
+                <p className="er__processing-text">Scanning your document for suggestions…</p>
               </div>
             )}
 
-            {!bmLoading && bmLoaded && (
+            {!ctLoading && ctLoaded && (
               <>
-                {bmRows.length === 0 && (
+                {ctRows.length === 0 && (
                   <p className="er__annex-prompt-hint">
-                    No headings detected (common with scanned documents) — add bookmarks manually
+                    No headings detected (common with scanned documents) — type the rows manually
                     below, or skip.
                   </p>
                 )}
                 <div className="er__bm-list">
-                  {bmRows.map((r) => (
-                    <div key={r.id} className={`er__bm-row ${r.included ? '' : 'er__bm-row--off'}`}>
-                      <input
-                        type="checkbox"
-                        checked={r.included}
-                        onChange={(e) => patchBmRow(r.id, { included: e.target.checked })}
-                        aria-label="Include bookmark"
-                      />
-                      <input
-                        type="text"
-                        className="er__bm-title"
-                        value={r.title}
-                        placeholder="Bookmark title"
-                        onChange={(e) => patchBmRow(r.id, { title: e.target.value })}
-                      />
-                      <label className="er__bm-pg">
-                        Pg
-                        <input
-                          type="number"
-                          min={1}
-                          max={numberedTotalPages ?? undefined}
-                          value={r.page}
-                          onChange={(e) => {
-                            let p = Math.max(1, Number(e.target.value) || 1);
-                            if (numberedTotalPages !== null) p = Math.min(p, numberedTotalPages);
-                            patchBmRow(r.id, { page: p });
-                          }}
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        className="er__bm-delete"
-                        onClick={() => removeBmRow(r.id)}
-                        aria-label="Delete bookmark"
-                      >
-                        ✗
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <button type="button" className="er__btn er__btn--outline" onClick={addBmRow}>
-                  + Add Bookmark
-                </button>
-              </>
-            )}
-
-            <div className="er__annex-prompt-actions">
-              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('index')} disabled={bmLoading}>
-                {bmSelected.length > 0
-                  ? `Next: Index (${bmSelected.length} bookmark${bmSelected.length === 1 ? '' : 's'}) →`
-                  : 'Skip bookmarks →'}
-              </button>
-              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('preview')}>
-                ← Back to Preview
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* ── Step: Master Index (rows pre-filled from bookmarks) ── */}
-        {step === 'index' && (
-          <section className="er__upload-section">
-            <p className="er__annex-prompt-hint">
-              A court-style <strong>Master Index page</strong> added at the front of your document.
-              {bmSelected.length > 0 && ' Rows are pre-filled from your bookmarks — edit freely.'}{' '}
-              Optional: skip if not needed.
-            </p>
-
-            <label className="er__idx-toggle">
-              <input
-                type="checkbox"
-                checked={idxWanted}
-                onChange={(e) => setIdxWanted(e.target.checked)}
-              />
-              Add a Master Index page
-            </label>
-
-            {idxWanted && (
-              <>
-                <div className="er__idx-fields">
-                  <label>
-                    Court (one line per row)
-                    <textarea
-                      rows={2}
-                      value={idxCourt}
-                      placeholder={'NATIONAL COMPANY LAW APPELLATE TRIBUNAL\nNEW DELHI'}
-                      onChange={(e) => setIdxCourt(e.target.value)}
-                    />
-                  </label>
-                  <label>
-                    Case number line
-                    <input
-                      type="text"
-                      value={idxCaseLine}
-                      placeholder="Company Appeal (AT) No. ___ of 2026"
-                      onChange={(e) => setIdxCaseLine(e.target.value)}
-                    />
-                  </label>
-                  <div className="er__idx-two">
-                    <label>
-                      Place
-                      <input type="text" value={idxPlace} placeholder="New Delhi" onChange={(e) => setIdxPlace(e.target.value)} />
-                    </label>
-                    <label>
-                      Date
-                      <input type="text" value={idxDate} placeholder="17.07.2026" onChange={(e) => setIdxDate(e.target.value)} />
-                    </label>
-                  </div>
-                </div>
-
-                <div className="er__bm-list">
-                  {idxRows.map((r, i) => (
-                    <div key={i} className="er__bm-row">
+                  {ctRows.map((r, i) => (
+                    <div key={r.id} className="er__bm-row">
                       <span className="er__idx-num">{i + 1}.</span>
                       <input
                         type="text"
                         className="er__bm-title"
                         value={r.title}
-                        placeholder="Particulars"
-                        onChange={(e) => patchIdxRow(i, { title: e.target.value })}
+                        placeholder="Particulars (e.g. Annexure A-1: Impugned order dated …)"
+                        onChange={(e) => patchCtRow(r.id, { title: e.target.value })}
                       />
                       <label className="er__bm-pg">
                         Pg
                         <input
                           type="text"
                           value={r.pages}
-                          placeholder="1-5"
-                          onChange={(e) => patchIdxRow(i, { pages: e.target.value })}
+                          placeholder="5 or 5-7"
+                          onChange={(e) => patchCtRow(r.id, { pages: e.target.value })}
                         />
                       </label>
-                      <button type="button" className="er__bm-delete" onClick={() => removeIdxRow(i)} aria-label="Delete row">
+                      <button
+                        type="button"
+                        className="er__bm-delete"
+                        onClick={() => removeCtRow(r.id)}
+                        aria-label="Delete row"
+                      >
                         ✗
                       </button>
                     </div>
                   ))}
                 </div>
-                <button type="button" className="er__btn er__btn--outline" onClick={addIdxRow}>
+                <button type="button" className="er__btn er__btn--outline" onClick={addCtRow}>
                   + Add Row
                 </button>
+
+                <div className="er__ct-outputs">
+                  <label className="er__idx-toggle">
+                    <input
+                      type="checkbox"
+                      checked={wantIndex}
+                      onChange={(e) => setWantIndex(e.target.checked)}
+                    />
+                    Add a Master Index page at the front
+                  </label>
+                  <label className="er__idx-toggle">
+                    <input
+                      type="checkbox"
+                      checked={wantBookmarks}
+                      onChange={(e) => setWantBookmarks(e.target.checked)}
+                    />
+                    Add clickable bookmarks in the PDF sidebar
+                  </label>
+                </div>
+
+                {wantIndex && ctFinal.length > 0 && (
+                  <div className="er__idx-fields">
+                    <label>
+                      Court (one line per row)
+                      <textarea
+                        rows={2}
+                        value={idxCourt}
+                        placeholder={'NATIONAL COMPANY LAW APPELLATE TRIBUNAL\nNEW DELHI'}
+                        onChange={(e) => setIdxCourt(e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Case number line
+                      <input
+                        type="text"
+                        value={idxCaseLine}
+                        placeholder="Company Appeal (AT) No. ___ of 2026"
+                        onChange={(e) => setIdxCaseLine(e.target.value)}
+                      />
+                    </label>
+                    <div className="er__idx-two">
+                      <label>
+                        Place
+                        <input type="text" value={idxPlace} placeholder="New Delhi" onChange={(e) => setIdxPlace(e.target.value)} />
+                      </label>
+                      <label>
+                        Date
+                        <input type="text" value={idxDate} placeholder="17.07.2026" onChange={(e) => setIdxDate(e.target.value)} />
+                      </label>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
             <div className="er__annex-prompt-actions">
-              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('sigs')}>
-                {idxReady ? 'Next: Signatures →' : 'Skip index →'}
+              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('sigs')} disabled={ctLoading}>
+                {ctFinal.length > 0 && (doIndex || doBookmarks)
+                  ? `Next: Signatures (${ctFinal.length} row${ctFinal.length === 1 ? '' : 's'}) →`
+                  : 'Skip contents →'}
               </button>
-              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('bookmarks')}>
-                ← Back
+              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('preview')}>
+                ← Back to Preview
               </button>
             </div>
           </section>
@@ -794,7 +736,7 @@ export default function ErrorReport() {
               <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('special')}>
                 {clientSig || clientSig2 || advocateSig ? 'Next: Special Pages →' : 'Skip signatures →'}
               </button>
-              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('index')}>
+              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('contents')}>
                 ← Back
               </button>
             </div>
@@ -874,24 +816,17 @@ export default function ErrorReport() {
                 <span className="er__cart-what">🔢 Merge &amp; Number</span>
                 <span className="er__cart-detail">✓ done</span>
               </li>
-              <li className={`er__cart-row ${bmSelected.length === 0 ? 'er__cart-row--skip' : ''}`}>
-                <span className="er__cart-what">🔖 Bookmarks</span>
+              <li className={`er__cart-row ${!(doIndex || doBookmarks) ? 'er__cart-row--skip' : ''}`}>
+                <span className="er__cart-what">☰ Contents</span>
                 <span className="er__cart-detail">
-                  {bmSelected.length > 0
-                    ? `${bmSelected.length} clickable bookmark${bmSelected.length === 1 ? '' : 's'} in the sidebar`
+                  {doIndex || doBookmarks
+                    ? `${ctFinal.length} row${ctFinal.length === 1 ? '' : 's'} → ${[
+                        doIndex && 'Master Index at the front',
+                        doBookmarks && 'clickable bookmarks',
+                      ].filter(Boolean).join(' + ')}`
                     : 'skipped'}
                 </span>
-                <button type="button" className="er__cart-edit" onClick={() => setStep('bookmarks')}
-                        disabled={step === 'processing'}>Edit</button>
-              </li>
-              <li className={`er__cart-row ${!idxReady ? 'er__cart-row--skip' : ''}`}>
-                <span className="er__cart-what">☰ Master Index</span>
-                <span className="er__cart-detail">
-                  {idxReady
-                    ? `index page with ${idxRows.filter((r) => r.title.trim()).length} row${idxRows.filter((r) => r.title.trim()).length === 1 ? '' : 's'} — added at the front`
-                    : 'skipped'}
-                </span>
-                <button type="button" className="er__cart-edit" onClick={() => setStep('index')}
+                <button type="button" className="er__cart-edit" onClick={() => setStep('contents')}
                         disabled={step === 'processing'}>Edit</button>
               </li>
               <li className={`er__cart-row ${!sigSummary ? 'er__cart-row--skip' : ''}`}>
@@ -926,7 +861,7 @@ export default function ErrorReport() {
                   onClick={stampSignatures}
                   disabled={specialActive && signPagesCheck.kind === 'error'}
                 >
-                  {hasSigs || bmSelected.length > 0 || idxReady ? 'Finish & Download' : 'Download'}
+                  {hasSigs || doIndex || doBookmarks ? 'Finish & Download' : 'Download'}
                 </button>
                 <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
                   Start Over
@@ -955,8 +890,8 @@ export default function ErrorReport() {
               <p className="er__annex-prompt-title">
                 ✓ Final PDF downloaded — {main.files.length} volume{main.files.length === 1 ? '' : 's'}
                 {annex.files.length > 0 && `, ${annex.files.length} annexure${annex.files.length === 1 ? '' : 's'}`}
-                {bmSelected.length > 0 && `, ${bmSelected.length} bookmarks`}
-                {idxReady && ', master index'}
+                {doBookmarks && `, ${ctFinal.length} bookmarks`}
+                {doIndex && ', master index'}
                 {sigSummary && ', annexure signatures'}
                 {specialActive && ', special-page signatures'}.
               </p>
