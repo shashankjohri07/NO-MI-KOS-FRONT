@@ -22,6 +22,11 @@ interface Props {
   /** Real page count of the uploaded document(s) — caps the index input so
    * the user can't type a page beyond the document. Null = unknown. */
   maxPages?: number | null;
+  /** When true, the page input asks "start numbering from page N" instead
+   * of "index ends at page N". The bound value is STILL the index-end page
+   * (start − 1) — the parent converts. Used by the Document Prep pipeline,
+   * which builds its own index so "index" wording would confuse. */
+  startFromMode?: boolean;
 }
 
 /**
@@ -44,6 +49,7 @@ export default function MainFileStep({
   hideSubmit = false,
   onSkip,
   maxPages = null,
+  startFromMode = false,
 }: Props) {
   const clampIndexEnd = (v: string) => {
     if (maxPages !== null && v !== '') {
@@ -54,6 +60,21 @@ export default function MainFileStep({
       }
     }
     setIndexEndPage(v);
+  };
+
+  // startFromMode shows "start numbering from page N" but still stores the
+  // index-end page (N − 1) in the shared state, so the API call is unchanged.
+  const startValue =
+    indexEndPage === '' ? '' : String((Number.parseInt(indexEndPage, 10) || 0) + 1);
+  const onStartChange = (v: string) => {
+    if (v === '') {
+      setIndexEndPage('');
+      return;
+    }
+    let n = Number.parseInt(v, 10);
+    if (!Number.isFinite(n) || n < 1) n = 1;
+    if (maxPages !== null && n > maxPages) n = maxPages;
+    setIndexEndPage(String(n - 1));
   };
   return (
     <>
@@ -88,26 +109,53 @@ export default function MainFileStep({
 
       {files.length > 0 && !isProcessing && (
         <div className="er__index-input">
-          <label htmlFor="er-index-end" className="er__index-input-label">
-            Index ends at page
-            <span className="er__index-input-hint">
-              {' '}
-              — numbering begins on the next page (use 0 if there is no index)
-              {maxPages !== null && `. Your document has ${maxPages} page${maxPages === 1 ? '' : 's'}.`}
-            </span>
-          </label>
-          <input
-            id="er-index-end"
-            type="number"
-            min={0}
-            max={maxPages ?? undefined}
-            step={1}
-            inputMode="numeric"
-            className="er__index-input-field"
-            placeholder="e.g. 3"
-            value={indexEndPage}
-            onChange={(e) => clampIndexEnd(e.target.value)}
-          />
+          {startFromMode ? (
+            <>
+              <label htmlFor="er-index-end" className="er__index-input-label">
+                Start page numbering from page
+                <span className="er__index-input-hint">
+                  {' '}
+                  — pages before this are left unnumbered (leave as 1 to number every page)
+                  {maxPages !== null && `. Your document has ${maxPages} page${maxPages === 1 ? '' : 's'}.`}
+                </span>
+              </label>
+              <input
+                id="er-index-end"
+                type="number"
+                min={1}
+                max={maxPages ?? undefined}
+                step={1}
+                inputMode="numeric"
+                className="er__index-input-field"
+                placeholder="1"
+                value={startValue}
+                onChange={(e) => onStartChange(e.target.value)}
+              />
+            </>
+          ) : (
+            <>
+              <label htmlFor="er-index-end" className="er__index-input-label">
+                Index ends at page
+                <span className="er__index-input-hint">
+                  {' '}
+                  — numbering begins on the next page (use 0 if there is no index)
+                  {maxPages !== null && `. Your document has ${maxPages} page${maxPages === 1 ? '' : 's'}.`}
+                </span>
+              </label>
+              <input
+                id="er-index-end"
+                type="number"
+                min={0}
+                max={maxPages ?? undefined}
+                step={1}
+                inputMode="numeric"
+                className="er__index-input-field"
+                placeholder="e.g. 3"
+                value={indexEndPage}
+                onChange={(e) => clampIndexEnd(e.target.value)}
+              />
+            </>
+          )}
         </div>
       )}
 

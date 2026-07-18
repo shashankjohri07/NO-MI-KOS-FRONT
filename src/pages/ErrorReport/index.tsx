@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { documentApi, trackTool } from '../../services/documentApi';
+import {
+  documentApi,
+  trackTool,
+  type BookmarkHeading,
+  type IndexRow,
+} from '../../services/documentApi';
 import { gateTool } from '../../services/billingApi';
 import { friendlyError } from '../../services/friendlyError';
 import { countTotalPages } from '../../services/pdfInfo';
@@ -28,6 +33,7 @@ type Step =
   | 'annex'       // collect annexure files
   | 'merging'     // Phase 1 processing (merge + number)
   | 'preview'     // show numbered PDF, ask if signatures needed
+  | 'contents'    // ONE list (title + pages) -> Master Index AND bookmarks
   | 'sigs'        // collect annexure signatures
   | 'special'     // collect special page signatures (user sees numbered PDF)
   | 'review'      // final review before Phase 2
@@ -35,7 +41,7 @@ type Step =
   | 'done'
   | 'error';
 
-const STEP_ORDER: Step[] = ['main', 'annex', 'merging', 'preview', 'sigs', 'special', 'review'];
+const STEP_ORDER: Step[] = ['main', 'annex', 'merging', 'preview', 'contents', 'sigs', 'special', 'review'];
 
 function stepIndex(s: Step): number {
   const i = STEP_ORDER.indexOf(s);
@@ -47,9 +53,11 @@ export default function ErrorReport() {
   const annex = useFileList();
 
   const [clientSig, setClientSig] = useState<File | null>(null);
+  const [clientSig2, setClientSig2] = useState<File | null>(null);
   const [advocateSig, setAdvocateSig] = useState<File | null>(null);
   const [signPages, setSignPages] = useState<string>('');
   const [specialClientSig, setSpecialClientSig] = useState<File | null>(null);
+  const [specialClientSig2, setSpecialClientSig2] = useState<File | null>(null);
   const [specialAdvocateSig, setSpecialAdvocateSig] = useState<File | null>(null);
   const [indexEndPage, setIndexEndPage] = useState<string>('');
   const [step, setStep] = useState<Step>('main');
@@ -64,9 +72,90 @@ export default function ErrorReport() {
   // Total pages in the numbered PDF (main + annexure pages combined).
   const [numberedTotalPages, setNumberedTotalPages] = useState<number | null>(null);
 
+  // ── Contents step: ONE user-curated list (title + pages) that drives BOTH
+  // the Master Index page and the clickable bookmarks. Detection on the
+  // numbered PDF only pre-fills suggestions — the user's list is the source
+  // of truth (detection is unreliable on scanned pages and its wording is
+  // not filing language).
+  interface ContentsRow {
+    id: number;
+    title: string;
+    /** Page or range in stamped numbering, e.g. "5" or "5-7". The index
+     * prints it verbatim; the bookmark jumps to the first number. */
+    pages: string;
+  }
+  const [ctRows, setCtRows] = useState<ContentsRow[]>([]);
+  const [ctLoaded, setCtLoaded] = useState(false);
+  const [ctLoading, setCtLoading] = useState(false);
+  const ctNextId = useRef(0);
+  const [wantIndex, setWantIndex] = useState(true);
+  const [wantBookmarks, setWantBookmarks] = useState(true);
+  // Case details for the index page header (only used when wantIndex).
+  const [idxCourt, setIdxCourt] = useState('');
+  const [idxCaseLine, setIdxCaseLine] = useState('');
+  const [idxPlace, setIdxPlace] = useState('');
+  const [idxDate, setIdxDate] = useState('');
+
+  // Detect headings once per numbered PDF when the step first opens —
+  // suggestions only, silently empty on scanned documents.
+  useEffect(() => {
+    if (step !== 'contents' || !numberedBlob || ctLoaded || ctLoading) return;
+    let cancelled = false;
+    setCtLoading(true);
+    const file = new File([numberedBlob], numberedFilename || 'document.pdf', {
+      type: 'application/pdf',
+    });
+    documentApi
+      .detectBookmarks(file)
+      .then((res) => {
+        if (cancelled) return;
+        setCtRows(
+          (res.ok ? res.headings : [])
+            .filter((h) => h.confidence >= 0.6)
+            .map((h) => ({
+              id: ctNextId.current++,
+              title: h.title,
+              pages: String(h.page),
+            })),
+        );
+        setCtLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCtRows([]);
+        setCtLoaded(true); // detection failed — user types rows manually
+      })
+      .finally(() => {
+        if (!cancelled) setCtLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, numberedBlob, numberedFilename, ctLoaded, ctLoading]);
+
+  const patchCtRow = (id: number, patch: Partial<ContentsRow>) =>
+    setCtRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const removeCtRow = (id: number) => setCtRows((rs) => rs.filter((r) => r.id !== id));
+  const addCtRow = () =>
+    setCtRows((rs) => [...rs, { id: ctNextId.current++, title: '', pages: '' }]);
+
+  /** First page number of a "5" / "5-7" pages value; null when unparseable. */
+  const firstPageOf = (pages: string): number | null => {
+    const m = /^\s*(\d+)/.exec(pages);
+    if (!m) return null;
+    const n = Number.parseInt(m[1], 10);
+    return Number.isFinite(n) && n >= 1 ? n : null;
+  };
+
+  const ctFinal = ctRows.filter((r) => r.title.trim());
+  const doIndex = wantIndex && ctFinal.length > 0;
+  const doBookmarks = wantBookmarks && ctFinal.length > 0;
+
   const clientSigInputRef = useRef<HTMLInputElement>(null);
+  const clientSig2InputRef = useRef<HTMLInputElement>(null);
   const advocateSigInputRef = useRef<HTMLInputElement>(null);
   const specialClientSigInputRef = useRef<HTMLInputElement>(null);
+  const specialClientSig2InputRef = useRef<HTMLInputElement>(null);
   const specialAdvocateSigInputRef = useRef<HTMLInputElement>(null);
 
   const isBusy = step === 'merging' || step === 'processing';
@@ -135,9 +224,11 @@ export default function ErrorReport() {
     main.reset();
     annex.reset();
     setClientSig(null);
+    setClientSig2(null);
     setAdvocateSig(null);
     setSignPages('');
     setSpecialClientSig(null);
+    setSpecialClientSig2(null);
     setSpecialAdvocateSig(null);
     setIndexEndPage('');
     setStep('main');
@@ -147,9 +238,19 @@ export default function ErrorReport() {
     setNumberedBlob(null);
     setNumberedFilename('');
     setNumberedTotalPages(null);
+    setCtRows([]);
+    setCtLoaded(false);
+    setWantIndex(true);
+    setWantBookmarks(true);
+    setIdxCourt('');
+    setIdxCaseLine('');
+    setIdxPlace('');
+    setIdxDate('');
     if (clientSigInputRef.current) clientSigInputRef.current.value = '';
+    if (clientSig2InputRef.current) clientSig2InputRef.current.value = '';
     if (advocateSigInputRef.current) advocateSigInputRef.current.value = '';
     if (specialClientSigInputRef.current) specialClientSigInputRef.current.value = '';
+    if (specialClientSig2InputRef.current) specialClientSig2InputRef.current.value = '';
     if (specialAdvocateSigInputRef.current) specialAdvocateSigInputRef.current.value = '';
   };
 
@@ -192,38 +293,99 @@ export default function ErrorReport() {
     }
   };
 
-  // ── Phase 2: Stamp signatures onto the already-numbered PDF ──
+  // ── Phase 2: signatures → index page → bookmarks, chained in order.
+  // The index page is PREPENDED, which shifts every page — so bookmarks go
+  // LAST, with their page numbers offset by however many pages the index
+  // added. That keeps every bookmark landing on the right page.
   const stampSignatures = async () => {
     if (main.files.length === 0) return;
     if (signPages.trim() && signPagesCheck.kind === 'error') return;
     setErrorMsg('');
     setStep('processing');
     try {
-      const useSpecial = signPages.trim() && (specialClientSig || specialAdvocateSig);
-      const hasSigs = clientSig || advocateSig || useSpecial;
+      const useSpecial = signPages.trim() && (specialClientSig || specialClientSig2 || specialAdvocateSig);
+      const hasSigs = clientSig || clientSig2 || advocateSig || useSpecial;
 
-      if (!hasSigs) {
-        // No signatures at all — just download the numbered PDF from Phase 1.
-        if (numberedBlob) triggerDownload(numberedBlob, numberedFilename);
-        trackTool('document-prep');
-        setStep('done');
-        return;
+      // 1) Base document: numbered (+ signatures if any).
+      let blob: Blob;
+      let filename: string;
+      if (hasSigs) {
+        ({ blob, filename } = await documentApi.writePagination(
+          main.files,
+          safeIndexEnd(),
+          annex.files.length > 0 ? annex.files : [],
+          clientSig || clientSig2 || advocateSig
+            ? { client: clientSig, client2: clientSig2, advocate: advocateSig }
+            : undefined,
+          undefined,
+          useSpecial ? signPages.trim() : undefined,
+          useSpecial
+            ? { client: specialClientSig, client2: specialClientSig2, advocate: specialAdvocateSig }
+            : undefined,
+        ));
+      } else {
+        if (!numberedBlob) throw new Error('Numbered document missing — go back to Preview.');
+        blob = numberedBlob;
+        filename = numberedFilename;
       }
 
-      const { blob, filename } = await documentApi.writePagination(
-        main.files,
-        safeIndexEnd(),
-        annex.files.length > 0 ? annex.files : [],
-        clientSig || advocateSig ? { client: clientSig, advocate: advocateSig } : undefined,
-        undefined,
-        useSpecial ? signPages.trim() : undefined,
-        useSpecial ? { client: specialClientSig, advocate: specialAdvocateSig } : undefined,
-      );
+      // 2) Master index page (prepended). Track how many pages it added.
+      let indexOffset = 0;
+      if (doIndex) {
+        const beforeFile = new File([blob], filename, { type: 'application/pdf' });
+        const before = await countTotalPages([beforeFile]);
+        const rows: IndexRow[] = ctFinal.map((r) => ({
+          title: r.title.trim(),
+          pages: r.pages.trim(),
+        }));
+        ({ blob, filename } = await documentApi.generateIndex(
+          {
+            court: idxCourt.trim() ? idxCourt.split('\n').map((l) => l.trim()).filter(Boolean) : [],
+            caseLines: idxCaseLine.trim() ? [idxCaseLine.trim()] : [],
+            matters: [],
+            indexTitle: 'INDEX',
+            rows,
+            advocates: [],
+            place: idxPlace.trim(),
+            date: idxDate.trim(),
+          },
+          [beforeFile],
+        ));
+        const afterFile = new File([blob], filename, { type: 'application/pdf' });
+        const after = await countTotalPages([afterFile]);
+        // If either count fails, assume the usual single index page.
+        indexOffset = before !== null && after !== null ? after - before : 1;
+      }
+
+      // 3) Bookmarks — written last so destinations are final. Each row's
+      // bookmark jumps to the FIRST page of its range, shifted by the index.
+      if (doBookmarks) {
+        const headings: BookmarkHeading[] = [];
+        if (indexOffset > 0) {
+          headings.push({ title: 'Index', level: 1, page: 1, confidence: 1, source: 'user_created' });
+        }
+        for (const r of ctFinal) {
+          const p = firstPageOf(r.pages);
+          if (p === null) continue; // no parseable page — index-only row
+          headings.push({
+            title: r.title.trim(),
+            level: 1,
+            page: p + indexOffset,
+            confidence: 1,
+            source: 'user_created',
+          });
+        }
+        if (headings.length > 0) {
+          const bmFile = new File([blob], filename, { type: 'application/pdf' });
+          ({ blob, filename } = await documentApi.applyBookmarks(bmFile, headings));
+        }
+      }
+
       triggerDownload(blob, filename);
       trackTool('document-prep');
       setStep('done');
     } catch (err: unknown) {
-      setErrorMsg(friendlyError(err, 'Failed to stamp signatures.'));
+      setErrorMsg(friendlyError(err, 'Failed to finish the document.'));
       setStep('error');
     }
   };
@@ -233,33 +395,45 @@ export default function ErrorReport() {
     { label: 'Pages', active: step === 'main', done: furthest > 0 && step !== 'main', reachable: true },
     { label: 'Annexures', active: step === 'annex', done: furthest > 1 && step !== 'annex', reachable: main.files.length > 0 },
     { label: 'Preview', active: step === 'preview' || step === 'merging', done: furthest > 3 && step !== 'preview', reachable: !!numberedBlob },
-    { label: 'Signatures', active: step === 'sigs', done: furthest > 4 && step !== 'sigs', reachable: !!numberedBlob },
-    { label: 'Special Pages', active: step === 'special', done: furthest > 5 && step !== 'special', reachable: !!numberedBlob },
+    { label: 'Contents', active: step === 'contents', done: furthest > 4 && step !== 'contents', reachable: !!numberedBlob },
+    { label: 'Signatures', active: step === 'sigs', done: furthest > 5 && step !== 'sigs', reachable: !!numberedBlob },
+    { label: 'Special Pages', active: step === 'special', done: furthest > 6 && step !== 'special', reachable: !!numberedBlob },
     { label: 'Review', active: step === 'review' || step === 'processing', done: step === 'done', reachable: !!numberedBlob },
   ];
 
+  // Going back to pages/annexures invalidates everything built on the
+  // numbered PDF (contents suggestions were detected on it).
+  const invalidateNumbered = () => {
+    setNumberedBlob(null);
+    setNumberedFilename('');
+    setNumberedTotalPages(null);
+    setCtRows([]);
+    setCtLoaded(false);
+  };
+
   const jumpToStep = (idx: number) => {
     if (isBusy) return;
-    const targets: Step[] = ['main', 'annex', 'preview', 'sigs', 'special', 'review'];
+    const targets: Step[] = ['main', 'annex', 'preview', 'contents', 'sigs', 'special', 'review'];
     const target = targets[idx];
     if (!target) return;
     // Can't jump past preview without having a numbered PDF.
     if (idx >= 2 && !numberedBlob) return;
-    // Going back to pages/annexures invalidates the numbered PDF — warn or just allow.
-    if (idx <= 1 && numberedBlob) {
-      setNumberedBlob(null);
-      setNumberedFilename('');
-      setNumberedTotalPages(null);
-    }
+    if (idx <= 1 && numberedBlob) invalidateNumbered();
     setStep(target);
   };
 
   // ── Summary helpers ──
-  const sigSummary = [clientSig && 'client', advocateSig && 'advocate'].filter(Boolean).join(' + ');
-  const specialSigSummary = [specialClientSig && 'client', specialAdvocateSig && 'advocate']
+  const sigSummary = [clientSig && 'client', clientSig2 && 'client 2', advocateSig && 'advocate']
     .filter(Boolean).join(' + ');
-  const specialActive = Boolean(signPages.trim() && (specialClientSig || specialAdvocateSig));
-  const hasSigs = !!(clientSig || advocateSig || specialActive);
+  const specialSigSummary = [
+    specialClientSig && 'client',
+    specialClientSig2 && 'client 2',
+    specialAdvocateSig && 'advocate',
+  ].filter(Boolean).join(' + ');
+  const specialActive = Boolean(
+    signPages.trim() && (specialClientSig || specialClientSig2 || specialAdvocateSig),
+  );
+  const hasSigs = !!(clientSig || clientSig2 || advocateSig || specialActive);
 
   // Preview URL for the numbered PDF blob.
   const [previewUrl, setPreviewUrl] = useState('');
@@ -308,6 +482,7 @@ export default function ErrorReport() {
               isProcessing={false}
               hideSubmit
               maxPages={mainPages}
+              startFromMode
             />
             {main.files.length > 0 && (
               <div className="er__annex-prompt-actions">
@@ -388,8 +563,8 @@ export default function ErrorReport() {
             )}
 
             <div className="er__annex-prompt-actions">
-              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('sigs')}>
-                Add Signatures →
+              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('contents')}>
+                Next: Contents →
               </button>
               <button
                 type="button"
@@ -400,7 +575,135 @@ export default function ErrorReport() {
                   setStep('done');
                 }}
               >
-                Download without signatures
+                Download as-is
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ── Step: Contents — ONE list drives the Master Index AND bookmarks ── */}
+        {step === 'contents' && (
+          <section className="er__upload-section">
+            <p className="er__annex-prompt-hint">
+              List your document&apos;s contents once — title + page range (in stamped numbering).
+              We use this ONE list for both the <strong>Master Index page</strong> (added at the
+              front) and the <strong>clickable bookmarks</strong> in the PDF sidebar. We&apos;ve
+              pre-filled suggestions from your document — fix the wording to your filing language,
+              set ranges, add what&apos;s missing. Optional: skip if not needed.
+            </p>
+
+            {ctLoading && (
+              <div className="er__processing">
+                <div className="er__spinner" />
+                <p className="er__processing-text">Scanning your document for suggestions…</p>
+              </div>
+            )}
+
+            {!ctLoading && ctLoaded && (
+              <>
+                {ctRows.length === 0 && (
+                  <p className="er__annex-prompt-hint">
+                    No headings detected (common with scanned documents) — type the rows manually
+                    below, or skip.
+                  </p>
+                )}
+                <div className="er__bm-list">
+                  {ctRows.map((r, i) => (
+                    <div key={r.id} className="er__bm-row">
+                      <span className="er__idx-num">{i + 1}.</span>
+                      <input
+                        type="text"
+                        className="er__bm-title"
+                        value={r.title}
+                        placeholder="Particulars (e.g. Annexure A-1: Impugned order dated …)"
+                        onChange={(e) => patchCtRow(r.id, { title: e.target.value })}
+                      />
+                      <label className="er__bm-pg">
+                        Pg
+                        <input
+                          type="text"
+                          value={r.pages}
+                          placeholder="5 or 5-7"
+                          onChange={(e) => patchCtRow(r.id, { pages: e.target.value })}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="er__bm-delete"
+                        onClick={() => removeCtRow(r.id)}
+                        aria-label="Delete row"
+                      >
+                        ✗
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" className="er__btn er__btn--outline" onClick={addCtRow}>
+                  + Add Row
+                </button>
+
+                <div className="er__ct-outputs">
+                  <label className="er__idx-toggle">
+                    <input
+                      type="checkbox"
+                      checked={wantIndex}
+                      onChange={(e) => setWantIndex(e.target.checked)}
+                    />
+                    Add a Master Index page at the front
+                  </label>
+                  <label className="er__idx-toggle">
+                    <input
+                      type="checkbox"
+                      checked={wantBookmarks}
+                      onChange={(e) => setWantBookmarks(e.target.checked)}
+                    />
+                    Add clickable bookmarks in the PDF sidebar
+                  </label>
+                </div>
+
+                {wantIndex && ctFinal.length > 0 && (
+                  <div className="er__idx-fields">
+                    <label>
+                      Court (one line per row)
+                      <textarea
+                        rows={2}
+                        value={idxCourt}
+                        placeholder={'NATIONAL COMPANY LAW APPELLATE TRIBUNAL\nNEW DELHI'}
+                        onChange={(e) => setIdxCourt(e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Case number line
+                      <input
+                        type="text"
+                        value={idxCaseLine}
+                        placeholder="Company Appeal (AT) No. ___ of 2026"
+                        onChange={(e) => setIdxCaseLine(e.target.value)}
+                      />
+                    </label>
+                    <div className="er__idx-two">
+                      <label>
+                        Place
+                        <input type="text" value={idxPlace} placeholder="New Delhi" onChange={(e) => setIdxPlace(e.target.value)} />
+                      </label>
+                      <label>
+                        Date
+                        <input type="text" value={idxDate} placeholder="17.07.2026" onChange={(e) => setIdxDate(e.target.value)} />
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="er__annex-prompt-actions">
+              <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('sigs')} disabled={ctLoading}>
+                {ctFinal.length > 0 && (doIndex || doBookmarks)
+                  ? `Next: Signatures (${ctFinal.length} row${ctFinal.length === 1 ? '' : 's'}) →`
+                  : 'Skip contents →'}
+              </button>
+              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('preview')}>
+                ← Back to Preview
               </button>
             </div>
           </section>
@@ -421,6 +724,9 @@ export default function ErrorReport() {
               advocateInputRef={advocateSigInputRef}
               onClientChange={setClientSig}
               onAdvocateChange={setAdvocateSig}
+              clientSig2={clientSig2}
+              client2InputRef={clientSig2InputRef}
+              onClient2Change={setClientSig2}
               onSubmit={() => goTo('special')}
               onCancel={() => goTo('special')}
               hideSubmit
@@ -428,10 +734,10 @@ export default function ErrorReport() {
             />
             <div className="er__annex-prompt-actions">
               <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('special')}>
-                {clientSig || advocateSig ? 'Next: Special Pages →' : 'Skip signatures →'}
+                {clientSig || clientSig2 || advocateSig ? 'Next: Special Pages →' : 'Skip signatures →'}
               </button>
-              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('preview')}>
-                ← Back to Preview
+              <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('contents')}>
+                ← Back
               </button>
             </div>
           </section>
@@ -455,6 +761,9 @@ export default function ErrorReport() {
               advocateInputRef={specialAdvocateSigInputRef}
               onClientChange={setSpecialClientSig}
               onAdvocateChange={setSpecialAdvocateSig}
+              clientSig2={specialClientSig2}
+              client2InputRef={specialClientSig2InputRef}
+              onClient2Change={setSpecialClientSig2}
               onSubmit={() => goTo('review')}
               onCancel={() => goTo('review')}
               hideActions
@@ -487,10 +796,10 @@ export default function ErrorReport() {
                   {main.files.length} volume{main.files.length === 1 ? '' : 's'}
                   {numberedTotalPages !== null && ` · ${numberedTotalPages} pages`}
                   {safeIndexEnd() > 0
-                    ? ` · numbering starts after index page ${safeIndexEnd()}`
+                    ? ` · numbering starts from page ${safeIndexEnd() + 1}`
                     : ' · numbered from page 1'}
                 </span>
-                <button type="button" className="er__cart-edit" onClick={() => { setNumberedBlob(null); setStep('main'); }}
+                <button type="button" className="er__cart-edit" onClick={() => { invalidateNumbered(); setStep('main'); }}
                         disabled={step === 'processing'}>Edit</button>
               </li>
               <li className={`er__cart-row ${annex.files.length === 0 ? 'er__cart-row--skip' : ''}`}>
@@ -500,12 +809,25 @@ export default function ErrorReport() {
                     ? `${annex.files.length} file${annex.files.length === 1 ? '' : 's'} → A-1…A-${annex.files.length}`
                     : 'skipped'}
                 </span>
-                <button type="button" className="er__cart-edit" onClick={() => { setNumberedBlob(null); setStep('annex'); }}
+                <button type="button" className="er__cart-edit" onClick={() => { invalidateNumbered(); setStep('annex'); }}
                         disabled={step === 'processing'}>Edit</button>
               </li>
               <li className="er__cart-row er__cart-row--done">
                 <span className="er__cart-what">🔢 Merge &amp; Number</span>
                 <span className="er__cart-detail">✓ done</span>
+              </li>
+              <li className={`er__cart-row ${!(doIndex || doBookmarks) ? 'er__cart-row--skip' : ''}`}>
+                <span className="er__cart-what">☰ Contents</span>
+                <span className="er__cart-detail">
+                  {doIndex || doBookmarks
+                    ? `${ctFinal.length} row${ctFinal.length === 1 ? '' : 's'} → ${[
+                        doIndex && 'Master Index at the front',
+                        doBookmarks && 'clickable bookmarks',
+                      ].filter(Boolean).join(' + ')}`
+                    : 'skipped'}
+                </span>
+                <button type="button" className="er__cart-edit" onClick={() => setStep('contents')}
+                        disabled={step === 'processing'}>Edit</button>
               </li>
               <li className={`er__cart-row ${!sigSummary ? 'er__cart-row--skip' : ''}`}>
                 <span className="er__cart-what">✍️ Annexure signatures</span>
@@ -539,7 +861,7 @@ export default function ErrorReport() {
                   onClick={stampSignatures}
                   disabled={specialActive && signPagesCheck.kind === 'error'}
                 >
-                  {hasSigs ? 'Stamp Signatures & Download' : 'Download'}
+                  {hasSigs || doIndex || doBookmarks ? 'Finish & Download' : 'Download'}
                 </button>
                 <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
                   Start Over
@@ -550,7 +872,7 @@ export default function ErrorReport() {
             {step === 'processing' && (
               <div className="er__processing">
                 <div className="er__spinner" />
-                <p className="er__processing-text">Stamping signatures…</p>
+                <p className="er__processing-text">Finishing your document…</p>
                 <p className="er__processing-hint">
                   {elapsedSeconds < 60
                     ? `${elapsedSeconds}s elapsed`
@@ -568,6 +890,8 @@ export default function ErrorReport() {
               <p className="er__annex-prompt-title">
                 ✓ Final PDF downloaded — {main.files.length} volume{main.files.length === 1 ? '' : 's'}
                 {annex.files.length > 0 && `, ${annex.files.length} annexure${annex.files.length === 1 ? '' : 's'}`}
+                {doBookmarks && `, ${ctFinal.length} bookmarks`}
+                {doIndex && ', master index'}
                 {sigSummary && ', annexure signatures'}
                 {specialActive && ', special-page signatures'}.
               </p>
