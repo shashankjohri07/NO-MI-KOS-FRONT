@@ -72,6 +72,13 @@ export default function ErrorReport() {
   // Total pages in the numbered PDF (main + annexure pages combined).
   const [numberedTotalPages, setNumberedTotalPages] = useState<number | null>(null);
 
+  // Phase 2 result — the finished PDF (signatures + index + bookmarks). Built
+  // automatically when the Review step opens so the user previews the real
+  // final document before downloading.
+  const [finalBlob, setFinalBlob] = useState<Blob | null>(null);
+  const [finalFilename, setFinalFilename] = useState('');
+  const [finalUrl, setFinalUrl] = useState('');
+
   // ── Contents step: ONE user-curated list (title + pages) that drives BOTH
   // the Master Index page and the clickable bookmarks. Detection on the
   // numbered PDF only pre-fills suggestions — the user's list is the source
@@ -263,6 +270,8 @@ export default function ErrorReport() {
     setNumberedBlob(null);
     setNumberedFilename('');
     setNumberedTotalPages(null);
+    setFinalBlob(null);
+    setFinalFilename('');
     setCtRows([]);
     setCtLoaded(false);
     setWantIndex(true);
@@ -322,7 +331,7 @@ export default function ErrorReport() {
   // The index page is PREPENDED, which shifts every page — so bookmarks go
   // LAST, with their page numbers offset by however many pages the index
   // added. That keeps every bookmark landing on the right page.
-  const stampSignatures = async () => {
+  const buildFinal = async () => {
     if (main.files.length === 0) return;
     if (signPages.trim() && signPagesCheck.kind === 'error') return;
     setErrorMsg('');
@@ -409,14 +418,51 @@ export default function ErrorReport() {
         }
       }
 
-      triggerDownload(blob, filename);
-      trackTool('document-prep');
-      setStep('done');
+      // Store the finished PDF and return to Review to preview it — the actual
+      // download happens when the user clicks Finish & Download.
+      setFinalBlob(blob);
+      setFinalFilename(filename);
+      setStep('review');
     } catch (err: unknown) {
       setErrorMsg(friendlyError(err, 'Failed to finish the document.'));
       setStep('error');
     }
   };
+
+  // Download the already-built final PDF (no rebuild).
+  const downloadFinal = () => {
+    if (!finalBlob) return;
+    triggerDownload(finalBlob, finalFilename);
+    trackTool('document-prep');
+    setStep('done');
+  };
+
+  // Build the final document as soon as the Review step opens (once per set of
+  // inputs). buildFinal flips to 'processing' while it runs, then back to
+  // 'review' with finalBlob set — so this guard stops it from re-firing.
+  useEffect(() => {
+    if (step === 'review' && !finalBlob) buildFinal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, finalBlob]);
+
+  // Object URL for the final-PDF preview iframe; revoked when the blob changes.
+  useEffect(() => {
+    if (!finalBlob) {
+      setFinalUrl('');
+      return;
+    }
+    const url = URL.createObjectURL(finalBlob);
+    setFinalUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [finalBlob]);
+
+  // Any move back to an earlier step invalidates the finished PDF, so Review
+  // always rebuilds from the latest inputs instead of showing a stale file.
+  useEffect(() => {
+    if (['main', 'annex', 'preview', 'contents', 'sigs', 'special'].includes(step)) {
+      setFinalBlob(null);
+    }
+  }, [step]);
 
   // ── Breadcrumb ──
   const crumbs: BreadcrumbStep[] = [
@@ -453,15 +499,9 @@ export default function ErrorReport() {
   // ── Summary helpers ──
   const sigSummary = [clientSig && 'client', clientSig2 && 'client 2', advocateSig && 'advocate']
     .filter(Boolean).join(' + ');
-  const specialSigSummary = [
-    specialClientSig && 'client',
-    specialClientSig2 && 'client 2',
-    specialAdvocateSig && 'advocate',
-  ].filter(Boolean).join(' + ');
   const specialActive = Boolean(
     signPages.trim() && (specialClientSig || specialClientSig2 || specialAdvocateSig),
   );
-  const hasSigs = !!(clientSig || clientSig2 || advocateSig || specialActive);
 
   // Preview URL for the numbered PDF blob.
   const [previewUrl, setPreviewUrl] = useState('');
@@ -620,7 +660,7 @@ export default function ErrorReport() {
               set ranges, add what&apos;s missing. Optional: skip if not needed.
             </p>
 
-            <div className={ctPreviewUrl ? 'er__ct-split' : undefined}>
+            <div className={ctPreviewUrl ? 'er__wide er__ct-split' : undefined}>
             <div className="er__ct-form">
             {ctLoading && (
               <div className="er__processing">
@@ -835,90 +875,19 @@ export default function ErrorReport() {
         {/* ── Review + Phase 2 processing ── */}
         {(step === 'review' || step === 'processing') && (
           <section className="er__upload-section">
-            <ul className="er__cart">
-              <li className="er__cart-row">
-                <span className="er__cart-what">📄 Main document</span>
-                <span className="er__cart-detail">
-                  {main.files.length} volume{main.files.length === 1 ? '' : 's'}
-                  {numberedTotalPages !== null && ` · ${numberedTotalPages} pages`}
-                  {safeIndexEnd() > 0
-                    ? ` · numbering starts from page ${safeIndexEnd() + 1}`
-                    : ' · numbered from page 1'}
-                </span>
-                <button type="button" className="er__cart-edit" onClick={() => { invalidateNumbered(); setStep('main'); }}
-                        disabled={step === 'processing'}>Edit</button>
-              </li>
-              <li className={`er__cart-row ${annex.files.length === 0 ? 'er__cart-row--skip' : ''}`}>
-                <span className="er__cart-what">📎 Annexures</span>
-                <span className="er__cart-detail">
-                  {annex.files.length > 0
-                    ? `${annex.files.length} file${annex.files.length === 1 ? '' : 's'} → A-1…A-${annex.files.length}`
-                    : 'skipped'}
-                </span>
-                <button type="button" className="er__cart-edit" onClick={() => { invalidateNumbered(); setStep('annex'); }}
-                        disabled={step === 'processing'}>Edit</button>
-              </li>
-              <li className="er__cart-row er__cart-row--done">
-                <span className="er__cart-what">🔢 Merge &amp; Number</span>
-                <span className="er__cart-detail">✓ done</span>
-              </li>
-              <li className={`er__cart-row ${!(doIndex || doBookmarks) ? 'er__cart-row--skip' : ''}`}>
-                <span className="er__cart-what">☰ Contents</span>
-                <span className="er__cart-detail">
-                  {doIndex || doBookmarks
-                    ? `${ctFinal.length} row${ctFinal.length === 1 ? '' : 's'} → ${[
-                        doIndex && 'Master Index at the front',
-                        doBookmarks && 'clickable bookmarks',
-                      ].filter(Boolean).join(' + ')}`
-                    : 'skipped'}
-                </span>
-                <button type="button" className="er__cart-edit" onClick={() => setStep('contents')}
-                        disabled={step === 'processing'}>Edit</button>
-              </li>
-              <li className={`er__cart-row ${!sigSummary ? 'er__cart-row--skip' : ''}`}>
-                <span className="er__cart-what">✍️ Annexure signatures</span>
-                <span className="er__cart-detail">
-                  {sigSummary ? `${sigSummary} — on every annexure page` : 'skipped'}
-                </span>
-                <button type="button" className="er__cart-edit" onClick={() => setStep('sigs')}
-                        disabled={step === 'processing'}>Edit</button>
-              </li>
-              <li className={`er__cart-row ${!specialActive ? 'er__cart-row--skip' : ''}`}>
-                <span className="er__cart-what">📝 Special pages</span>
-                <span className="er__cart-detail">
-                  {specialActive
-                    ? `${specialSigSummary} on pages ${signPages.trim()}`
-                    : 'skipped'}
-                </span>
-                <button type="button" className="er__cart-edit" onClick={() => setStep('special')}
-                        disabled={step === 'processing'}>Edit</button>
-              </li>
-            </ul>
-
-            {signPagesCheck.kind === 'error' && specialActive && (
-              <p className="er__sig-extra-error">⚠ {signPagesCheck.message}</p>
-            )}
-
-            {step === 'review' && (
-              <div className="er__annex-prompt-actions">
-                <button
-                  type="button"
-                  className="er__btn er__btn--primary"
-                  onClick={stampSignatures}
-                  disabled={specialActive && signPagesCheck.kind === 'error'}
-                >
-                  {hasSigs || doIndex || doBookmarks ? 'Finish & Download' : 'Download'}
-                </button>
-                <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
-                  Start Over
+            {/* A special-page error blocks the build — surface it instead of
+                spinning forever (reachable only via a breadcrumb jump). */}
+            {step === 'review' && !finalUrl && specialActive && signPagesCheck.kind === 'error' ? (
+              <div className="er__annex-prompt">
+                <p className="er__sig-extra-error">⚠ {signPagesCheck.message}</p>
+                <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('special')}>
+                  ← Fix special pages
                 </button>
               </div>
-            )}
-
-            {step === 'processing' && (
+            ) : (step === 'processing' || (step === 'review' && !finalUrl)) ? (
               <div className="er__processing">
                 <div className="er__spinner" />
-                <p className="er__processing-text">Finishing your document…</p>
+                <p className="er__processing-text">Building your final document…</p>
                 <p className="er__processing-hint">
                   {elapsedSeconds < 60
                     ? `${elapsedSeconds}s elapsed`
@@ -926,6 +895,34 @@ export default function ErrorReport() {
                   {elapsedSeconds > 30 && ' — backend may be waking up, hang tight'}
                 </p>
               </div>
+            ) : (
+              <>
+                <p className="er__annex-prompt-hint">
+                  Your finished document — {[
+                    doIndex && 'Master Index',
+                    doBookmarks && 'clickable bookmarks',
+                    (sigSummary || specialActive) && 'signatures',
+                  ].filter(Boolean).join(', ') || 'page numbering'} applied. Review it below,
+                  then download. Use the breadcrumb above to change anything.
+                </p>
+                <div className="er__wide er__review-preview">
+                  <div className="er__preview er__review-preview-box">
+                    <iframe
+                      src={`${finalUrl}#toolbar=1&navpanes=0`}
+                      title="Final document preview"
+                      className="er__preview-frame"
+                    />
+                  </div>
+                </div>
+                <div className="er__annex-prompt-actions">
+                  <button type="button" className="er__btn er__btn--primary" onClick={downloadFinal}>
+                    Download
+                  </button>
+                  <button type="button" className="er__btn er__btn--outline" onClick={handleReset}>
+                    Start Over
+                  </button>
+                </div>
+              </>
             )}
           </section>
         )}

@@ -726,12 +726,32 @@
   text-align: right;
 }
 
+/* Break a block out of the narrow (≈800px) step container so wide previews
+   get real room, centred on the viewport. */
+.er__wide {
+  /* The step column is a centred flex column (align-items:center), so a child
+     wider than it overflows evenly on both sides — i.e. stays viewport-centred.
+     Just give it the wider width; no margin/transform needed. */
+  width: min(1200px, calc(100vw - 4rem));
+  max-width: none;
+}
+
 /* Contents step — rows on the left, numbered-PDF preview on the right */
 .er__ct-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.2rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 1.5rem;
   align-items: start;
+}
+
+/* Review step — full-width preview of the finished document */
+.er__review-preview {
+  margin-bottom: 1.5rem;
+}
+.er__review-preview-box {
+  height: 78vh;
+  min-height: 560px;
+  margin-bottom: 0;
 }
 
 .er__ct-form {
