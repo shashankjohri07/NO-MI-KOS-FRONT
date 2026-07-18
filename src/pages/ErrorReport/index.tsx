@@ -54,9 +54,11 @@ export default function ErrorReport() {
   const annex = useFileList();
 
   const [clientSig, setClientSig] = useState<File | null>(null);
+  const [clientSig2, setClientSig2] = useState<File | null>(null);
   const [advocateSig, setAdvocateSig] = useState<File | null>(null);
   const [signPages, setSignPages] = useState<string>('');
   const [specialClientSig, setSpecialClientSig] = useState<File | null>(null);
+  const [specialClientSig2, setSpecialClientSig2] = useState<File | null>(null);
   const [specialAdvocateSig, setSpecialAdvocateSig] = useState<File | null>(null);
   const [indexEndPage, setIndexEndPage] = useState<string>('');
   const [step, setStep] = useState<Step>('main');
@@ -161,8 +163,10 @@ export default function ErrorReport() {
   const idxReady = idxWanted && idxRows.some((r) => r.title.trim());
 
   const clientSigInputRef = useRef<HTMLInputElement>(null);
+  const clientSig2InputRef = useRef<HTMLInputElement>(null);
   const advocateSigInputRef = useRef<HTMLInputElement>(null);
   const specialClientSigInputRef = useRef<HTMLInputElement>(null);
+  const specialClientSig2InputRef = useRef<HTMLInputElement>(null);
   const specialAdvocateSigInputRef = useRef<HTMLInputElement>(null);
 
   const isBusy = step === 'merging' || step === 'processing';
@@ -231,9 +235,11 @@ export default function ErrorReport() {
     main.reset();
     annex.reset();
     setClientSig(null);
+    setClientSig2(null);
     setAdvocateSig(null);
     setSignPages('');
     setSpecialClientSig(null);
+    setSpecialClientSig2(null);
     setSpecialAdvocateSig(null);
     setIndexEndPage('');
     setStep('main');
@@ -253,8 +259,10 @@ export default function ErrorReport() {
     setIdxRows([]);
     setIdxPrefilled(false);
     if (clientSigInputRef.current) clientSigInputRef.current.value = '';
+    if (clientSig2InputRef.current) clientSig2InputRef.current.value = '';
     if (advocateSigInputRef.current) advocateSigInputRef.current.value = '';
     if (specialClientSigInputRef.current) specialClientSigInputRef.current.value = '';
+    if (specialClientSig2InputRef.current) specialClientSig2InputRef.current.value = '';
     if (specialAdvocateSigInputRef.current) specialAdvocateSigInputRef.current.value = '';
   };
 
@@ -307,8 +315,8 @@ export default function ErrorReport() {
     setErrorMsg('');
     setStep('processing');
     try {
-      const useSpecial = signPages.trim() && (specialClientSig || specialAdvocateSig);
-      const hasSigs = clientSig || advocateSig || useSpecial;
+      const useSpecial = signPages.trim() && (specialClientSig || specialClientSig2 || specialAdvocateSig);
+      const hasSigs = clientSig || clientSig2 || advocateSig || useSpecial;
 
       // 1) Base document: numbered (+ signatures if any).
       let blob: Blob;
@@ -318,10 +326,14 @@ export default function ErrorReport() {
           main.files,
           safeIndexEnd(),
           annex.files.length > 0 ? annex.files : [],
-          clientSig || advocateSig ? { client: clientSig, advocate: advocateSig } : undefined,
+          clientSig || clientSig2 || advocateSig
+            ? { client: clientSig, client2: clientSig2, advocate: advocateSig }
+            : undefined,
           undefined,
           useSpecial ? signPages.trim() : undefined,
-          useSpecial ? { client: specialClientSig, advocate: specialAdvocateSig } : undefined,
+          useSpecial
+            ? { client: specialClientSig, client2: specialClientSig2, advocate: specialAdvocateSig }
+            : undefined,
         ));
       } else {
         if (!numberedBlob) throw new Error('Numbered document missing — go back to Preview.');
@@ -419,11 +431,17 @@ export default function ErrorReport() {
   };
 
   // ── Summary helpers ──
-  const sigSummary = [clientSig && 'client', advocateSig && 'advocate'].filter(Boolean).join(' + ');
-  const specialSigSummary = [specialClientSig && 'client', specialAdvocateSig && 'advocate']
+  const sigSummary = [clientSig && 'client', clientSig2 && 'client 2', advocateSig && 'advocate']
     .filter(Boolean).join(' + ');
-  const specialActive = Boolean(signPages.trim() && (specialClientSig || specialAdvocateSig));
-  const hasSigs = !!(clientSig || advocateSig || specialActive);
+  const specialSigSummary = [
+    specialClientSig && 'client',
+    specialClientSig2 && 'client 2',
+    specialAdvocateSig && 'advocate',
+  ].filter(Boolean).join(' + ');
+  const specialActive = Boolean(
+    signPages.trim() && (specialClientSig || specialClientSig2 || specialAdvocateSig),
+  );
+  const hasSigs = !!(clientSig || clientSig2 || advocateSig || specialActive);
 
   // Preview URL for the numbered PDF blob.
   const [previewUrl, setPreviewUrl] = useState('');
@@ -764,6 +782,9 @@ export default function ErrorReport() {
               advocateInputRef={advocateSigInputRef}
               onClientChange={setClientSig}
               onAdvocateChange={setAdvocateSig}
+              clientSig2={clientSig2}
+              client2InputRef={clientSig2InputRef}
+              onClient2Change={setClientSig2}
               onSubmit={() => goTo('special')}
               onCancel={() => goTo('special')}
               hideSubmit
@@ -771,7 +792,7 @@ export default function ErrorReport() {
             />
             <div className="er__annex-prompt-actions">
               <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('special')}>
-                {clientSig || advocateSig ? 'Next: Special Pages →' : 'Skip signatures →'}
+                {clientSig || clientSig2 || advocateSig ? 'Next: Special Pages →' : 'Skip signatures →'}
               </button>
               <button type="button" className="er__btn er__btn--outline" onClick={() => setStep('index')}>
                 ← Back
@@ -798,6 +819,9 @@ export default function ErrorReport() {
               advocateInputRef={specialAdvocateSigInputRef}
               onClientChange={setSpecialClientSig}
               onAdvocateChange={setSpecialAdvocateSig}
+              clientSig2={specialClientSig2}
+              client2InputRef={specialClientSig2InputRef}
+              onClient2Change={setSpecialClientSig2}
               onSubmit={() => goTo('review')}
               onCancel={() => goTo('review')}
               hideActions

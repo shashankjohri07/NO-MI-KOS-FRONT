@@ -195,7 +195,7 @@ export const documentApi = {
     files: File | File[],
     indexEndPage: number,
     annexures: File[] = [],
-    signatures?: { client?: File | null; advocate?: File | null },
+    signatures?: { client?: File | null; client2?: File | null; advocate?: File | null },
     /** Kept in the signature for backwards-compat with existing callers
      * that pass an onProgress (no-op now — the pipeline is synchronous). */
     _onProgress?: (info: { state: string; progress: number }) => void,
@@ -213,7 +213,7 @@ export const documentApi = {
      * annexure page). When omitted, the backend falls back to `signatures`
      * for the special pages — preserving older callers' behaviour.
      */
-    specialSignatures?: { client?: File | null; advocate?: File | null }
+    specialSignatures?: { client?: File | null; client2?: File | null; advocate?: File | null }
   ): Promise<{ blob: Blob; filename: string }> {
     void _onProgress;
     const fileList = Array.isArray(files) ? files : [files];
@@ -221,8 +221,11 @@ export const documentApi = {
     for (const f of fileList) fd.append('document', f);
     for (const f of annexures) fd.append('annex', f);
     if (signatures?.client) fd.append('clientSignature', signatures.client);
+    if (signatures?.client2) fd.append('clientSignature2', signatures.client2);
     if (signatures?.advocate) fd.append('advocateSignature', signatures.advocate);
     if (specialSignatures?.client) fd.append('specialSignatureClient', specialSignatures.client);
+    if (specialSignatures?.client2)
+      fd.append('specialSignatureClient2', specialSignatures.client2);
     if (specialSignatures?.advocate)
       fd.append('specialSignatureAdvocate', specialSignatures.advocate);
     fd.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));
@@ -243,9 +246,12 @@ export const documentApi = {
       for (const f of fileList) fdRetry.append('document', f);
       for (const f of annexures) fdRetry.append('annex', f);
       if (signatures?.client) fdRetry.append('clientSignature', signatures.client);
+      if (signatures?.client2) fdRetry.append('clientSignature2', signatures.client2);
       if (signatures?.advocate) fdRetry.append('advocateSignature', signatures.advocate);
       if (specialSignatures?.client)
         fdRetry.append('specialSignatureClient', specialSignatures.client);
+      if (specialSignatures?.client2)
+        fdRetry.append('specialSignatureClient2', specialSignatures.client2);
       if (specialSignatures?.advocate)
         fdRetry.append('specialSignatureAdvocate', specialSignatures.advocate);
       fdRetry.append('indexEndPage', String(Math.max(0, Math.floor(indexEndPage || 0))));

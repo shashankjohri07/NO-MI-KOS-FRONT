@@ -8,6 +8,12 @@ interface Props {
   advocateInputRef: Ref<HTMLInputElement>;
   onClientChange: (f: File | null) => void;
   onAdvocateChange: (f: File | null) => void;
+  /** Optional SECOND client signature/stamp — for filings with two client
+   * parties. Stamped bottom-centre. The slot renders only when
+   * `onClient2Change` is provided. */
+  clientSig2?: File | null;
+  client2InputRef?: Ref<HTMLInputElement>;
+  onClient2Change?: (f: File | null) => void;
   /** Comma+range spec ("1, 3-5, 8") of extra MAIN pages to also sign.
    * Optional: when `onSignPagesChange` is omitted the "also sign main pages"
    * block is hidden entirely (the wizard moves it to its own Special Pages
@@ -41,6 +47,9 @@ export default function SigPickStep({
   advocateInputRef,
   onClientChange,
   onAdvocateChange,
+  clientSig2 = null,
+  client2InputRef,
+  onClient2Change,
   signPages,
   onSignPagesChange,
   onSubmit,
@@ -90,6 +99,27 @@ export default function SigPickStep({
             </p>
           )}
         </div>
+
+        {onClient2Change && (
+          <div className="er__sig-slot">
+            <label className="er__sig-slot-label" htmlFor="er-client2-sig">
+              Client 2 Signature / Stamp (PNG / JPG) — optional
+            </label>
+            <input
+              ref={client2InputRef}
+              id="er-client2-sig"
+              type="file"
+              accept="image/png,image/jpeg"
+              className="er__sig-slot-input"
+              onChange={(e) => onClient2Change(e.target.files?.[0] ?? null)}
+            />
+            {clientSig2 && (
+              <p className="er__sig-slot-name">
+                ✓ {clientSig2.name} ({(clientSig2.size / 1024).toFixed(1)} KB)
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="er__sig-slot">
           <label className="er__sig-slot-label" htmlFor="er-advocate-sig">

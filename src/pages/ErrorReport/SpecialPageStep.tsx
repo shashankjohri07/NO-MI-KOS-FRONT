@@ -18,6 +18,11 @@ interface Props {
   advocateInputRef: Ref<HTMLInputElement>;
   onClientChange: (f: File | null) => void;
   onAdvocateChange: (f: File | null) => void;
+  /** Optional SECOND client signature/stamp slot (bottom-centre) — renders
+   * only when `onClient2Change` is provided. */
+  clientSig2?: File | null;
+  client2InputRef?: Ref<HTMLInputElement>;
+  onClient2Change?: (f: File | null) => void;
   onSubmit: () => void;
   onCancel: () => void;
   /** When provided, shows a "Skip & Download →" button to download the pending
@@ -52,6 +57,9 @@ export default function SpecialPageStep({
   advocateInputRef,
   onClientChange,
   onAdvocateChange,
+  clientSig2 = null,
+  client2InputRef,
+  onClient2Change,
   onSubmit,
   onCancel,
   onSkip,
@@ -93,7 +101,7 @@ export default function SpecialPageStep({
     }
   }, [signPages, maxPage]);
 
-  const hasSig = !!clientSig || !!advocateSig;
+  const hasSig = !!clientSig || !!advocateSig || !!clientSig2;
   const canSubmit = preview.kind === 'ok' && hasSig;
 
   return (
@@ -161,6 +169,27 @@ export default function SpecialPageStep({
             </p>
           )}
         </div>
+
+        {onClient2Change && (
+          <div className="er__sig-slot">
+            <label className="er__sig-slot-label" htmlFor="er-special-client2-sig">
+              Client 2 Signature / Stamp — centre (PNG / JPG) — optional
+            </label>
+            <input
+              ref={client2InputRef}
+              id="er-special-client2-sig"
+              type="file"
+              accept="image/png,image/jpeg"
+              className="er__sig-slot-input"
+              onChange={(e) => onClient2Change(e.target.files?.[0] ?? null)}
+            />
+            {clientSig2 && (
+              <p className="er__sig-slot-name">
+                ✓ {clientSig2.name} ({(clientSig2.size / 1024).toFixed(1)} KB)
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="er__sig-slot">
           <label className="er__sig-slot-label" htmlFor="er-special-advocate-sig">
