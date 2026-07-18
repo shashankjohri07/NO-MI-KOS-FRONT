@@ -18,6 +18,17 @@ interface Tool {
 // backend product config (editable in the admin dashboard, no deploy needed).
 const TOOLS: Tool[] = [
   {
+    key: 'document-prep',
+    to: '/prep',
+    tag: 'Full Pipeline',
+    tagVariant: 'soon',
+    icon: '◆',
+    title: 'Document Prep',
+    description:
+      'Run all three stages with a guided wizard — clickable breadcrumb lets you skip and revisit.',
+    features: ['Number → Annex → Sign', 'Jump between steps', 'Single output PDF'],
+  },
+  {
     key: 'page-numbering',
     to: '/tools/page-numbering',
     tag: 'Live',
@@ -70,18 +81,17 @@ const TOOLS: Tool[] = [
       'Type the case details, list the contents, and download a court-ready Master Index page.',
     features: ['NCLT / court filing format', 'Auto-fill rows from PDF', 'Attach to document'],
   },
-  {
-    key: 'document-prep',
-    to: '/prep',
-    tag: 'Full Pipeline',
-    tagVariant: 'soon',
-    icon: '◆',
-    title: 'Document Prep',
-    description:
-      'Run all three stages with a guided wizard — clickable breadcrumb lets you skip and revisit.',
-    features: ['Number → Annex → Sign', 'Jump between steps', 'Single output PDF'],
-  },
 ];
+
+// Sort the cards by the admin-set `order` (1 = first). Products without a
+// saved order keep their definition position as the fallback, so nothing
+// jumps until an admin actually reorders it.
+function orderedTools(overrides: ProductTagMap): Tool[] {
+  return TOOLS
+    .map((t, i) => ({ t, i, order: overrides[t.key]?.order ?? i + 1 }))
+    .sort((a, b) => (a.order - b.order) || (a.i - b.i))
+    .map(({ t }) => t);
+}
 
 export default function Products() {
   const [tagOverrides, setTagOverrides] = useState<ProductTagMap>({});
@@ -103,7 +113,7 @@ export default function Products() {
         </header>
 
         <div className="products__grid">
-          {TOOLS.map((t) => {
+          {orderedTools(tagOverrides).map((t) => {
             const o = tagOverrides[t.key];
             const tag = o?.tag ?? t.tag;
             const tagVariant = o?.tagVariant ?? t.tagVariant;
@@ -129,10 +139,12 @@ export default function Products() {
   );
 }
 
-/** Product list shared with the admin tag editor — key + title + defaults. */
-export const PRODUCT_DEFS = TOOLS.map(({ key, title, tag, tagVariant }) => ({
+/** Product list shared with the admin tag editor — key + title + defaults.
+ * `order` defaults to the 1-based definition position. */
+export const PRODUCT_DEFS = TOOLS.map(({ key, title, tag, tagVariant }, i) => ({
   key,
   title,
   tag,
   tagVariant,
+  order: i + 1,
 }));
