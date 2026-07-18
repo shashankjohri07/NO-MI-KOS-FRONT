@@ -472,6 +472,7 @@ export default function ErrorReport() {
               isProcessing={false}
               hideSubmit
               maxPages={mainPages}
+              startFromMode
             />
             {main.files.length > 0 && (
               <div className="er__annex-prompt-actions">
@@ -829,7 +830,7 @@ export default function ErrorReport() {
                   {main.files.length} volume{main.files.length === 1 ? '' : 's'}
                   {numberedTotalPages !== null && ` · ${numberedTotalPages} pages`}
                   {safeIndexEnd() > 0
-                    ? ` · numbering starts after index page ${safeIndexEnd()}`
+                    ? ` · numbering starts from page ${safeIndexEnd() + 1}`
                     : ' · numbered from page 1'}
                 </span>
                 <button type="button" className="er__cart-edit" onClick={() => { invalidateNumbered(); setStep('main'); }}
