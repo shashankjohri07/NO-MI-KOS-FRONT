@@ -10,7 +10,6 @@ import PageNumberingTool from '../pages/Tools/PageNumbering';
 import AnnexuresTool from '../pages/Tools/Annexures';
 import SignaturesTool from '../pages/Tools/Signatures';
 import BookmarksTool from '../pages/Tools/Bookmarks';
-import IndexGeneratorTool from '../pages/Tools/IndexGenerator';
 import Admin from '../pages/Admin';
 import Pricing from '../pages/Pricing';
 import RequireAuth from '../components/RequireAuth';
@@ -71,14 +70,6 @@ const AppRoutes = () => {
         element={
           <RequireAuth>
             <BookmarksTool />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/tools/index-generator"
-        element={
-          <RequireAuth>
-            <IndexGeneratorTool />
           </RequireAuth>
         }
       />

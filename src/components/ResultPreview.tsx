@@ -1,6 +1,10 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { setChainedDoc } from '../services/toolChain';
+import { countPdfPages } from '../services/pdfInfo';
+import { splitPdfIntoParts } from '../services/pdfSplit';
+import { downloadBlob, downloadBlobsStaggered } from '../services/download';
+import DownloadChoiceModal from './DownloadChoiceModal';
 import '../styles/ResultPreview.css';
 
 /**
@@ -45,16 +49,29 @@ export default function ResultPreview({
   const url = useMemo(() => URL.createObjectURL(blob), [blob]);
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
 
+  const [showDownloadChoice, setShowDownloadChoice] = useState(false);
+  const [pageCount, setPageCount] = useState<number | null>(null);
+
   const continueTo = (step: NextStep) => {
     setChainedDoc(blob, filename, producedBy || 'previous tool');
     navigate(step.to);
   };
 
-  const download = () => {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
+  const openDownloadChoice = async () => {
+    const file = new File([blob], filename, { type: 'application/pdf' });
+    setPageCount(await countPdfPages(file));
+    setShowDownloadChoice(true);
+  };
+
+  const downloadFull = () => {
+    setShowDownloadChoice(false);
+    downloadBlob(blob, filename);
+  };
+
+  const downloadSplit = async (parts: number) => {
+    setShowDownloadChoice(false);
+    const files = await splitPdfIntoParts(blob, filename, parts);
+    await downloadBlobsStaggered(files);
   };
 
   return (
@@ -78,7 +95,7 @@ export default function ResultPreview({
         </p>
         <iframe className="rp__frame" src={url} title="Result preview" />
         <div className="rp__actions">
-          <button type="button" className="er__btn er__btn--primary" onClick={download}>
+          <button type="button" className="er__btn er__btn--primary" onClick={openDownloadChoice}>
             ⬇ Download PDF
           </button>
           <button type="button" className="er__btn er__btn--outline" onClick={onReset}>
@@ -86,6 +103,14 @@ export default function ResultPreview({
           </button>
         </div>
         <p className="rp__filename">{filename}</p>
+        {showDownloadChoice && (
+          <DownloadChoiceModal
+            pageCount={pageCount}
+            onClose={() => setShowDownloadChoice(false)}
+            onDownloadFull={downloadFull}
+            onDownloadSplit={downloadSplit}
+          />
+        )}
         {nextSteps && nextSteps.length > 0 && (
           <div className="rp__next">
             <p className="rp__next-label">Continue with this document — no re-upload needed:</p>

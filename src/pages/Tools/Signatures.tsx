@@ -247,7 +247,6 @@ export default function SignaturesTool() {
             producedBy="Signatures"
             nextSteps={[
               { label: 'Add Bookmarks', to: '/tools/bookmarks' },
-              { label: 'Generate Index', to: '/tools/index-generator' },
             ]}
           />
         )}

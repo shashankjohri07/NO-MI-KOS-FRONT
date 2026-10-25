@@ -1,0 +1,115 @@
+/* Full-vs-split download prompt — matches the site's paper & ink vocabulary. */
+
+.dlm__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 26, 26, 0.45);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.dlm {
+  background: var(--paper, #f4f1ea);
+  border: 1px solid #e8e2d4;
+  border-radius: 16px;
+  padding: 2rem 2.25rem;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.dlm__close {
+  position: absolute;
+  top: 0.8rem;
+  right: 1rem;
+  border: none;
+  background: transparent;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--muted, #777);
+  cursor: pointer;
+}
+.dlm__close:hover { color: var(--ink, #1a1a1a); }
+
+.dlm__title {
+  font-family: var(--serif);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--ink, #1a1a1a);
+  margin: 0 0 0.4rem;
+}
+
+.dlm__subtitle {
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  color: var(--muted, #777);
+  margin: 0 0 1.2rem;
+  line-height: 1.5;
+}
+
+.dlm__option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  color: var(--ink, #1a1a1a);
+  padding: 0.5rem 0;
+  cursor: pointer;
+}
+
+.dlm__split-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.4rem 0 0.2rem 1.6rem;
+}
+
+.dlm__split-row label {
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  color: var(--muted, #777);
+}
+
+.dlm__split-row input[type='number'] {
+  width: 64px;
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #d6d0c2;
+  border-radius: 6px;
+  background: #fffdf8;
+  color: var(--ink, #1a1a1a);
+}
+
+.dlm__hint {
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  color: var(--muted, #999);
+}
+
+.dlm__actions {
+  display: flex;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+}
+
+.dlm__btn {
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  padding: 0.65rem 1.3rem;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--ink, #1a1a1a);
+}
+.dlm__btn--primary { background: var(--ink, #1a1a1a); color: #fff; }
+.dlm__btn--ghost {
+  background: transparent;
+  color: var(--muted, #777);
+  border-color: #d6d0c2;
+}
+.dlm__btn--ghost:hover { color: var(--ink, #1a1a1a); }
