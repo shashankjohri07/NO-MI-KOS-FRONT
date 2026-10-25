@@ -529,7 +529,6 @@ export default function ErrorReport() {
               isProcessing={false}
               hideSubmit
               maxPages={mainPages}
-              startFromMode
             />
             {main.files.length > 0 && (
               <div className="er__annex-prompt-actions">
@@ -596,7 +595,8 @@ export default function ErrorReport() {
             </h2>
             <p className="er__annex-prompt-hint">
               Your document has been merged and numbered. Scroll through the preview below to see the
-              stamped page numbers (top-right). You can now add signatures, or download as-is.
+              stamped page numbers (top-right). You can now add bookmarks and signatures, or download
+              it as it is now.
             </p>
 
             {previewUrl && (
@@ -623,7 +623,7 @@ export default function ErrorReport() {
                   });
                 }}
               >
-                Download as-is
+                Download without bookmarks or signatures
               </button>
             </div>
           </section>

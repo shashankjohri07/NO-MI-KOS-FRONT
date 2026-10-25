@@ -1,8 +1,8 @@
 /**
  * Translate raw backend/python/network errors into messages a lawyer can
- * act on. The raw text ("Python exited 1: Traceback…") is kept as a short
- * technical suffix so support/debugging isn't blinded, but the headline
- * tells the user what actually went wrong and what to do next.
+ * act on. Raw technical text ("Python exited 1: Traceback…") never reaches
+ * the screen — it's logged to the console for debugging, while the user
+ * only ever sees plain language describing what went wrong and what to do.
  */
 
 interface Rule {
@@ -51,7 +51,8 @@ export function friendlyError(err: unknown, fallback: string): string {
   for (const rule of RULES) {
     if (rule.match.test(raw)) return rule.message;
   }
-  // Unknown error: fallback headline + trimmed technical detail.
-  const detail = raw.replace(/\s+/g, ' ').slice(0, 140);
-  return `${fallback}${detail ? ` (${detail}${raw.length > 140 ? '…' : ''})` : ''}`;
+  // Unknown error: log the technical detail for debugging, but never show
+  // it on screen — a lawyer can't act on a stack trace or exit code.
+  console.error('[friendlyError] unmatched error:', raw);
+  return `${fallback} Try again — if it keeps failing, send us feedback describing what you were doing.`;
 }
