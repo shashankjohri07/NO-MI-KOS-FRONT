@@ -333,6 +333,31 @@
   color: var(--muted);
 }
 
+.er__processing-fact {
+  max-width: 440px;
+  margin-top: 0.5rem;
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--paper, #f4f1ea);
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink);
+  text-align: center;
+  animation: processingFactFade 0.4s ease;
+}
+
+.er__processing-fact-label {
+  font-weight: 700;
+  color: var(--gold);
+}
+
+@keyframes processingFactFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* --- error panel --------------------------------------------------------- */
 .er__error-msg {
   width: 100%;

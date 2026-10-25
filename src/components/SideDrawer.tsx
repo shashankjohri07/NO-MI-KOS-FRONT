@@ -91,7 +91,7 @@ export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
           ) : (
             <>
               <button className="side-drawer__btn side-drawer__btn--primary" onClick={handleAuthClick}>
-                LOGIN/SIGNUP
+                Login / Sign up
               </button>
               <button className="side-drawer__btn" onClick={() => { onClose(); navigate('/pricing'); }}>
                 Plans &amp; Pricing
