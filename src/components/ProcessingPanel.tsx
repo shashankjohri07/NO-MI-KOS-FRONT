@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { shuffledFacts } from '../data/indiaJudiciaryFacts';
 
 /**
  * Staged processing indicator. Replaces the bare spinner + elapsed counter:
@@ -9,6 +10,10 @@ import { useEffect, useState } from 'react';
  *    gateway error told it the Render dyno is cold-starting;
  *  - elapsed-time heuristics for the phases we cannot observe from the
  *    browser (upload finished → python working).
+ *
+ * A free-tier cold start can take up to a minute — once the wait passes a
+ * few seconds we rotate in short Indian-judiciary facts so there's
+ * something to read instead of a bare spinner.
  */
 interface Props {
   /** Tool-specific verb for the main stage, e.g. "Stamping page numbers". */
@@ -25,6 +30,8 @@ export function signalBackendWaking(): void {
 export default function ProcessingPanel({ label = 'Processing your document' }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const [waking, setWaking] = useState(false);
+  const facts = useMemo(shuffledFacts, []);
+  const [factIndex, setFactIndex] = useState(0);
 
   useEffect(() => {
     const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
@@ -35,6 +42,15 @@ export default function ProcessingPanel({ label = 'Processing your document' }: 
       window.removeEventListener(BACKEND_WAKING_EVENT, onWaking);
     };
   }, []);
+
+  // Facts only matter once the wait is long enough to need distracting from —
+  // start rotating a few seconds in, not immediately.
+  const showFacts = elapsed >= 4;
+  useEffect(() => {
+    if (!showFacts) return;
+    const id = window.setInterval(() => setFactIndex((i) => (i + 1) % facts.length), 5000);
+    return () => window.clearInterval(id);
+  }, [showFacts, facts.length]);
 
   const stage = waking
     ? {
@@ -65,6 +81,11 @@ export default function ProcessingPanel({ label = 'Processing your document' }: 
       <p className="er__processing-hint">
         {clock} elapsed — {stage.hint}
       </p>
+      {showFacts && (
+        <p className="er__processing-fact" key={factIndex}>
+          <span className="er__processing-fact-label">Did you know?</span> {facts[factIndex]}
+        </p>
+      )}
     </div>
   );
 }
