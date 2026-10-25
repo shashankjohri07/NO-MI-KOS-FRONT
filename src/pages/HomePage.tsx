@@ -26,7 +26,7 @@ const STEPS = [
 ];
 
 const STATS = [
-  { value: '5+', label: 'Filing tools', sub: 'Page numbering, annexures, signatures, bookmarks, index' },
+  { value: '4+', label: 'Filing tools', sub: 'Page numbering, annexures, signatures, bookmarks' },
   { value: '< 30s', label: 'Processing time', sub: 'Even for 200+ page documents with annexures' },
   { value: '0', label: 'Files stored', sub: 'Processed in memory, never saved on our servers' },
   { value: '24/7', label: 'Available', sub: 'No office hours — file prep anytime, anywhere' },

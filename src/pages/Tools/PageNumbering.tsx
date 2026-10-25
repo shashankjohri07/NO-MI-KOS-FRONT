@@ -134,7 +134,6 @@ export default function PageNumberingTool() {
               { label: 'Add Annexures', to: '/tools/annexures' },
               { label: 'Stamp Signatures', to: '/tools/signatures' },
               { label: 'Add Bookmarks', to: '/tools/bookmarks' },
-              { label: 'Generate Index', to: '/tools/index-generator' },
             ]}
           />
         )}

@@ -10,7 +10,6 @@ const TOOL_LABELS: Record<string, string> = {
   'annexures': 'Annexures',
   'signatures': 'Signatures',
   'bookmarks': 'Bookmarks',
-  'index-generator': 'Index Generator',
 };
 
 /** Plan cards + Razorpay checkout. Hidden behind the admin's billing switch:

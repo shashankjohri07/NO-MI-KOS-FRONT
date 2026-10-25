@@ -70,17 +70,6 @@ const TOOLS: Tool[] = [
       'Auto-detect chapters, sections and annexures — review the outline, then download a PDF with clickable bookmarks.',
     features: ['Smart heading detection', 'Review & edit before apply', 'Nested hierarchy'],
   },
-  {
-    key: 'index-generator',
-    to: '/tools/index-generator',
-    tag: 'New',
-    tagVariant: 'live',
-    icon: '☰',
-    title: 'Index Generator',
-    description:
-      'Type the case details, list the contents, and download a court-ready Master Index page.',
-    features: ['NCLT / court filing format', 'Auto-fill rows from PDF', 'Attach to document'],
-  },
 ];
 
 // Sort the cards by the admin-set `order` (1 = first). Products without a

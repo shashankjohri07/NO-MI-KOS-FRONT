@@ -3,12 +3,14 @@ import {
   documentApi,
   trackTool,
   type BookmarkHeading,
-  type IndexRow,
 } from '../../services/documentApi';
 import { gateTool } from '../../services/billingApi';
 import { friendlyError } from '../../services/friendlyError';
-import { countTotalPages } from '../../services/pdfInfo';
+import { countPdfPages, countTotalPages } from '../../services/pdfInfo';
+import { splitPdfIntoParts } from '../../services/pdfSplit';
+import { downloadBlob, downloadBlobsStaggered } from '../../services/download';
 import Breadcrumb, { type BreadcrumbStep } from '../../components/Breadcrumb';
+import DownloadChoiceModal from '../../components/DownloadChoiceModal';
 import PlanBanner from '../../components/PlanBanner';
 import ToolNote from '../../components/ToolNote';
 import '../../styles/ErrorReport.css';
@@ -95,13 +97,7 @@ export default function ErrorReport() {
   const [ctLoaded, setCtLoaded] = useState(false);
   const [ctLoading, setCtLoading] = useState(false);
   const ctNextId = useRef(0);
-  const [wantIndex, setWantIndex] = useState(true);
   const [wantBookmarks, setWantBookmarks] = useState(true);
-  // Case details for the index page header (only used when wantIndex).
-  const [idxCourt, setIdxCourt] = useState('');
-  const [idxCaseLine, setIdxCaseLine] = useState('');
-  const [idxPlace, setIdxPlace] = useState('');
-  const [idxDate, setIdxDate] = useState('');
 
   // Detect headings once per numbered PDF when the step first opens —
   // suggestions only, silently empty on scanned documents.
@@ -180,7 +176,6 @@ export default function ErrorReport() {
   };
 
   const ctFinal = ctRows.filter((r) => r.title.trim());
-  const doIndex = wantIndex && ctFinal.length > 0;
   const doBookmarks = wantBookmarks && ctFinal.length > 0;
 
   const clientSigInputRef = useRef<HTMLInputElement>(null);
@@ -274,12 +269,7 @@ export default function ErrorReport() {
     setFinalFilename('');
     setCtRows([]);
     setCtLoaded(false);
-    setWantIndex(true);
     setWantBookmarks(true);
-    setIdxCourt('');
-    setIdxCaseLine('');
-    setIdxPlace('');
-    setIdxDate('');
     if (clientSigInputRef.current) clientSigInputRef.current.value = '';
     if (clientSig2InputRef.current) clientSig2InputRef.current.value = '';
     if (advocateSigInputRef.current) advocateSigInputRef.current.value = '';
@@ -288,13 +278,35 @@ export default function ErrorReport() {
     if (specialAdvocateSigInputRef.current) specialAdvocateSigInputRef.current.value = '';
   };
 
-  const triggerDownload = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+  // Generic "download this blob" flow shared by every download button in
+  // this wizard — always asks full-vs-split before anything downloads.
+  const [downloadRequest, setDownloadRequest] = useState<{
+    blob: Blob;
+    filename: string;
+    pageCount: number | null;
+    onDone: () => void;
+  } | null>(null);
+
+  const requestDownload = async (blob: Blob, filename: string, onDone: () => void) => {
+    const file = new File([blob], filename, { type: 'application/pdf' });
+    const pageCount = await countPdfPages(file);
+    setDownloadRequest({ blob, filename, pageCount, onDone });
+  };
+
+  const downloadFull = () => {
+    if (!downloadRequest) return;
+    downloadBlob(downloadRequest.blob, downloadRequest.filename);
+    downloadRequest.onDone();
+    setDownloadRequest(null);
+  };
+
+  const downloadSplit = async (parts: number) => {
+    if (!downloadRequest) return;
+    const { blob, filename, onDone } = downloadRequest;
+    setDownloadRequest(null);
+    const files = await splitPdfIntoParts(blob, filename, parts);
+    await downloadBlobsStaggered(files);
+    onDone();
   };
 
   // ── Phase 1: Merge + Number (no signatures) ──
@@ -327,10 +339,7 @@ export default function ErrorReport() {
     }
   };
 
-  // ── Phase 2: signatures → index page → bookmarks, chained in order.
-  // The index page is PREPENDED, which shifts every page — so bookmarks go
-  // LAST, with their page numbers offset by however many pages the index
-  // added. That keeps every bookmark landing on the right page.
+  // ── Phase 2: signatures → bookmarks, chained in order.
   const buildFinal = async () => {
     if (main.files.length === 0) return;
     if (signPages.trim() && signPagesCheck.kind === 'error') return;
@@ -363,51 +372,20 @@ export default function ErrorReport() {
         filename = numberedFilename;
       }
 
-      // 2) Master index page (prepended). Track how many pages it added.
-      let indexOffset = 0;
-      if (doIndex) {
-        const beforeFile = new File([blob], filename, { type: 'application/pdf' });
-        const before = await countTotalPages([beforeFile]);
-        const rows: IndexRow[] = ctFinal.map((r) => ({
-          title: r.title.trim(),
-          pages: r.pages.trim(),
-        }));
-        ({ blob, filename } = await documentApi.generateIndex(
-          {
-            court: idxCourt.trim() ? idxCourt.split('\n').map((l) => l.trim()).filter(Boolean) : [],
-            caseLines: idxCaseLine.trim() ? [idxCaseLine.trim()] : [],
-            matters: [],
-            indexTitle: 'INDEX',
-            rows,
-            advocates: [],
-            place: idxPlace.trim(),
-            date: idxDate.trim(),
-          },
-          [beforeFile],
-        ));
-        const afterFile = new File([blob], filename, { type: 'application/pdf' });
-        const after = await countTotalPages([afterFile]);
-        // If either count fails, assume the usual single index page.
-        indexOffset = before !== null && after !== null ? after - before : 1;
-      }
-
-      // 3) Bookmarks — written last so destinations are final. Each row's
-      // bookmark jumps to the FIRST page of its range, shifted by the index.
+      // 2) Bookmarks — written last so destinations are final. Each row's
+      // bookmark jumps to the FIRST page of its range.
       if (doBookmarks) {
         const headings: BookmarkHeading[] = [];
-        if (indexOffset > 0) {
-          headings.push({ title: 'Index', level: 1, page: 1, confidence: 1, source: 'user_created' });
-        }
         // Rows are in STAMPED numbering; the PDF's physical page is that
-        // plus the unstamped front pages, plus whatever the index prepended.
+        // plus the unstamped front pages.
         const skip = safeIndexEnd();
         for (const r of ctFinal) {
           const p = firstPageOf(r.pages);
-          if (p === null) continue; // no parseable page — index-only row
+          if (p === null) continue; // no parseable page
           headings.push({
             title: r.title.trim(),
             level: 1,
-            page: p + skip + indexOffset,
+            page: p + skip,
             confidence: 1,
             source: 'user_created',
           });
@@ -432,9 +410,10 @@ export default function ErrorReport() {
   // Download the already-built final PDF (no rebuild).
   const downloadFinal = () => {
     if (!finalBlob) return;
-    triggerDownload(finalBlob, finalFilename);
-    trackTool('document-prep');
-    setStep('done');
+    requestDownload(finalBlob, finalFilename, () => {
+      trackTool('document-prep');
+      setStep('done');
+    });
   };
 
   // Build the final document as soon as the Review step opens (once per set of
@@ -638,9 +617,10 @@ export default function ErrorReport() {
                 type="button"
                 className="er__btn er__btn--outline"
                 onClick={() => {
-                  triggerDownload(numberedBlob, numberedFilename);
-                  trackTool('document-prep');
-                  setStep('done');
+                  requestDownload(numberedBlob, numberedFilename, () => {
+                    trackTool('document-prep');
+                    setStep('done');
+                  });
                 }}
               >
                 Download as-is
@@ -654,10 +634,9 @@ export default function ErrorReport() {
           <section className="er__upload-section">
             <p className="er__annex-prompt-hint">
               List your document&apos;s contents once — title + page range (in stamped numbering).
-              We use this ONE list for both the <strong>Master Index page</strong> (added at the
-              front) and the <strong>clickable bookmarks</strong> in the PDF sidebar. We&apos;ve
-              pre-filled suggestions from your document — fix the wording to your filing language,
-              set ranges, add what&apos;s missing. Optional: skip if not needed.
+              We use this list to add <strong>clickable bookmarks</strong> in the PDF sidebar.
+              We&apos;ve pre-filled suggestions from your document — fix the wording to your
+              filing language, set ranges, add what&apos;s missing. Optional: skip if not needed.
             </p>
 
             <div className={ctPreviewUrl ? 'er__wide er__ct-split' : undefined}>
@@ -718,53 +697,12 @@ export default function ErrorReport() {
                   <label className="er__idx-toggle">
                     <input
                       type="checkbox"
-                      checked={wantIndex}
-                      onChange={(e) => setWantIndex(e.target.checked)}
-                    />
-                    Add a Master Index page at the front
-                  </label>
-                  <label className="er__idx-toggle">
-                    <input
-                      type="checkbox"
                       checked={wantBookmarks}
                       onChange={(e) => setWantBookmarks(e.target.checked)}
                     />
                     Add clickable bookmarks in the PDF sidebar
                   </label>
                 </div>
-
-                {wantIndex && ctFinal.length > 0 && (
-                  <div className="er__idx-fields">
-                    <label>
-                      Court (one line per row)
-                      <textarea
-                        rows={2}
-                        value={idxCourt}
-                        placeholder={'NATIONAL COMPANY LAW APPELLATE TRIBUNAL\nNEW DELHI'}
-                        onChange={(e) => setIdxCourt(e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Case number line
-                      <input
-                        type="text"
-                        value={idxCaseLine}
-                        placeholder="Company Appeal (AT) No. ___ of 2026"
-                        onChange={(e) => setIdxCaseLine(e.target.value)}
-                      />
-                    </label>
-                    <div className="er__idx-two">
-                      <label>
-                        Place
-                        <input type="text" value={idxPlace} placeholder="New Delhi" onChange={(e) => setIdxPlace(e.target.value)} />
-                      </label>
-                      <label>
-                        Date
-                        <input type="text" value={idxDate} placeholder="17.07.2026" onChange={(e) => setIdxDate(e.target.value)} />
-                      </label>
-                    </div>
-                  </div>
-                )}
               </>
             )}
             </div>
@@ -785,7 +723,7 @@ export default function ErrorReport() {
             <div className="er__annex-prompt-actions">
               <button type="button" className="er__btn er__btn--primary" onClick={() => goTo('sigs')}>
                 {ctLoading && 'Skip suggestions →'}
-                {!ctLoading && (ctFinal.length > 0 && (doIndex || doBookmarks)
+                {!ctLoading && (ctFinal.length > 0 && doBookmarks
                   ? `Next: Signatures (${ctFinal.length} row${ctFinal.length === 1 ? '' : 's'}) →`
                   : 'Skip contents →')}
               </button>
@@ -899,7 +837,6 @@ export default function ErrorReport() {
               <>
                 <p className="er__annex-prompt-hint">
                   Your finished document — {[
-                    doIndex && 'Master Index',
                     doBookmarks && 'clickable bookmarks',
                     (sigSummary || specialActive) && 'signatures',
                   ].filter(Boolean).join(', ') || 'page numbering'} applied. Review it below,
@@ -934,7 +871,6 @@ export default function ErrorReport() {
                 ✓ Final PDF downloaded — {main.files.length} volume{main.files.length === 1 ? '' : 's'}
                 {annex.files.length > 0 && `, ${annex.files.length} annexure${annex.files.length === 1 ? '' : 's'}`}
                 {doBookmarks && `, ${ctFinal.length} bookmarks`}
-                {doIndex && ', master index'}
                 {sigSummary && ', annexure signatures'}
                 {specialActive && ', special-page signatures'}.
               </p>
@@ -959,6 +895,15 @@ export default function ErrorReport() {
           </section>
         )}
       </div>
+
+      {downloadRequest && (
+        <DownloadChoiceModal
+          pageCount={downloadRequest.pageCount}
+          onClose={() => setDownloadRequest(null)}
+          onDownloadFull={downloadFull}
+          onDownloadSplit={downloadSplit}
+        />
+      )}
     </div>
   );
 }

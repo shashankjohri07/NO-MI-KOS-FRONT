@@ -1026,7 +1026,6 @@ const TOOL_LABELS: Record<string, string> = {
   'annexures': 'Annexures',
   'signatures': 'Signatures',
   'bookmarks': 'Bookmarks',
-  'index-generator': 'Index Generator',
 };
 
 const TOOL_COLORS: Record<string, string> = {
@@ -1035,7 +1034,6 @@ const TOOL_COLORS: Record<string, string> = {
   'annexures': '#2e6fb8',
   'signatures': '#8b3a2a',
   'bookmarks': '#2ea043',
-  'index-generator': '#7c3aed',
 };
 
 function ToolStats({ stats }: { stats: ToolStat[] }) {

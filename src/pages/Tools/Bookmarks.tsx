@@ -391,7 +391,6 @@ export default function BookmarksTool() {
             producedBy="Bookmarks"
             nextSteps={[
               { label: 'Stamp Signatures', to: '/tools/signatures' },
-              { label: 'Generate Index', to: '/tools/index-generator' },
             ]}
           />
         )}

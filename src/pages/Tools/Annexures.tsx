@@ -147,7 +147,6 @@ export default function AnnexuresTool() {
             nextSteps={[
               { label: 'Stamp Signatures', to: '/tools/signatures' },
               { label: 'Add Bookmarks', to: '/tools/bookmarks' },
-              { label: 'Generate Index', to: '/tools/index-generator' },
             ]}
           />
         )}
