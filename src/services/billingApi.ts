@@ -10,7 +10,13 @@ import type { BillingPlan } from './adminApi';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/';
 
-const client = axios.create({ baseURL: API_BASE_URL, timeout: 30000, withCredentials: true });
+const client = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+  withCredentials: true,
+  // Required by the backend's CSRF guard on cookie-authenticated writes.
+  headers: { 'X-Requested-With': 'XMLHttpRequest' },
+});
 
 export interface Entitlement {
   billingEnabled: boolean;
