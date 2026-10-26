@@ -6,6 +6,8 @@ const client = axios.create({
   baseURL: API_BASE_URL,
   timeout: 20000,
   withCredentials: true,
+  // Required by the backend's CSRF guard on cookie-authenticated writes.
+  headers: { 'X-Requested-With': 'XMLHttpRequest' },
 });
 
 export interface UserProfile {

@@ -12,6 +12,23 @@ interface Rule {
 
 const RULES: Rule[] = [
   {
+    match: /too_many_pages/i,
+    message:
+      'These files have more than 3,000 pages in total — too many to process at once. Split the filing into smaller parts and run them separately.',
+  },
+  {
+    match: /not a valid pdf/i,
+    message: 'One of the files is not a valid PDF. Re-export it as a PDF (or print it to PDF) and try again.',
+  },
+  {
+    match: /must be png or jpg/i,
+    message: 'Signature images must be PNG or JPG files. Save the signature in one of those formats and try again.',
+  },
+  {
+    match: /too many requests/i,
+    message: 'Too many requests in a short time — please wait a minute and try again.',
+  },
+  {
     match: /password|encrypt/i,
     message:
       'This PDF is password-protected. Remove the password (open it and re-save / print to PDF) and try again.',

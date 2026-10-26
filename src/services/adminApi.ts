@@ -9,6 +9,8 @@ const client = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000, // event creation waits for the email blast
   withCredentials: true,
+  // Required by the backend's CSRF guard on cookie-authenticated writes.
+  headers: { 'X-Requested-With': 'XMLHttpRequest' },
 });
 
 export interface Whoami {
