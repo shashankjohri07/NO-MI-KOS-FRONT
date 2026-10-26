@@ -1,0 +1,31 @@
+name: Keep Render dyno warm
+
+# Render's free tier spins the web service down after ~15 minutes with no
+# inbound traffic, so the FIRST request after any idle period pays a
+# 10-20s cold start. The backend already has this same cron (see
+# NO-MO-KOS-BACK/.github/workflows/keep-warm.yml) — this covers the
+# frontend's own Render service too, since it sleeps independently and a
+# user can hit a cold frontend even when the backend is warm.
+#
+# nginx (this service) has no dedicated /health route, so we ping '/' —
+# it always serves index.html and is enough to count as real inbound
+# traffic.
+#
+# This is a stopgap, not a fix: it buys good first-load latency at zero
+# cost while the product is pre-revenue-scale. The real fix, once there's
+# real traffic/revenue to justify it, is paying for a tier that doesn't
+# sleep at all.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /
+        run: |
+          curl -sf --max-time 30 https://no-mi-kos-front.onrender.com/ \
+            && echo "frontend warm" \
+            || echo "::warning::ping failed (dyno may be cold-starting or down)"
